@@ -1,0 +1,154 @@
+# ============================================================================
+# Alertmanager Configuration
+# ============================================================================
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+# Templates pour les notifications
+templates: []
+
+# Route tree définit le routage des alertes
+route:
+  # Groupe par cluster, alertname et instance
+  group_by: ['cluster', 'alertname', 'instance']
+  
+  # Attendre 10 secondes avant d'envoyer les alertes groupées
+  group_wait: 10s
+  
+  # Attendre 5 minutes avant d'évaluer les alertes groupées
+  group_interval: 5m
+  
+  # Attendre 4 heures avant d'annuler les alertes répétées
+  repeat_interval: 4h
+  
+  # Recepteur par défaut
+  receiver: 'default'
+  
+  # Routes enfants
+  routes:
+    # Route pour les alertes critiques
+    - match:
+        severity: critical
+      receiver: 'critical'
+      group_wait: 5s
+      group_interval: 5m
+      continue: true
+    
+    # Route pour les alertes de warning
+    - match:
+        severity: warning
+      receiver: 'warning'
+      group_wait: 30s
+      group_interval: 10m
+    
+    # Route pour les alertes d'infrastructure
+    - match:
+        component: infrastructure
+      receiver: 'infrastructure'
+    
+    # Route pour les alertes d'application
+    - match:
+        component: application
+      receiver: 'application'
+    
+    # Route pour les alertes de base de données
+    - match:
+        component: database
+      receiver: 'critical'
+    
+    # Route pour les alertes de backup
+    - match:
+        component: backup
+      receiver: 'critical'
+
+# ============================================================================
+# Receivers (Destinations des alertes)
+# ============================================================================
+
+receivers:
+  # Récepteur par défaut
+  - name: 'default'
+    slack_configs:
+      - channel: '#alerts'
+        title: 'Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+    
+    email_configs:
+      - to: '${ALERT_EMAIL_TO}'
+        from: '${ALERT_EMAIL_FROM}'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: '${SMTP_USERNAME}'
+        auth_password: '${SMTP_PASSWORD}'
+        headers:
+          Subject: 'DevSecOps Alert: {{ .GroupLabels.alertname }}'
+        html: |
+          <h3>{{ .GroupLabels.alertname }}</h3>
+          <p>{{ range .Alerts }}{{ .Annotations.description }}<br/>{{ end }}</p>
+
+  # Récepteur pour les alertes critiques
+  - name: 'critical'
+    slack_configs:
+      - channel: '#critical-alerts'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+    
+    email_configs:
+      - to: '${ALERT_EMAIL_TO}'
+        from: '${ALERT_EMAIL_FROM}'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: '${SMTP_USERNAME}'
+        auth_password: '${SMTP_PASSWORD}'
+        headers:
+          Subject: '🚨 CRITICAL ALERT: {{ .GroupLabels.alertname }}'
+        html: |
+          <h2 style="color: red;">🚨 CRITICAL ALERT</h2>
+          <h3>{{ .GroupLabels.alertname }}</h3>
+          <p>{{ range .Alerts }}{{ .Annotations.summary }}<br/>{{ .Annotations.description }}<br/>{{ end }}</p>
+    
+    # Webhook personnalisé (ex: PagerDuty, Opsgenie, etc.)
+    # webhook_configs:
+    #   - url: 'https://api.pagerduty.com/v2/enqueue'
+    #     send_resolved: true
+
+  # Récepteur pour les alertes de warning
+  - name: 'warning'
+    slack_configs:
+      - channel: '#alerts'
+        title: '⚠️ WARNING: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  # Récepteur pour les alertes d'infrastructure
+  - name: 'infrastructure'
+    slack_configs:
+      - channel: '#infrastructure'
+        title: 'Infrastructure Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  # Récepteur pour les alertes d'application
+  - name: 'application'
+    slack_configs:
+      - channel: '#application-alerts'
+        title: 'Application Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+# ============================================================================
+# Inhibition Rules (Supprimer certaines alertes)
+# ============================================================================
+
+inhibit_rules:
+  # Si une alerte critique existe, ignorer les avertissements similaires
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']
+  
+  # Si un nœud est down, ignorer les Pod-based alerts de ce nœud
+  - source_match:
+      alertname: 'NodeNotReady'
+    target_match_re:
+      alertname: 'Pod.*'
+    equal: ['instance']

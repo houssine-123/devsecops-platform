@@ -1,0 +1,81 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Dependencies
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Build outputs
+dist/
+build/
+target/
+*.jar
+*.war
+*.zip
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+kubeconfig
+kubeconfig.yml
+*.kubeconfig
+
+# Jenkins
+jenkins_home/
+.jenkinsci/
+
+# Monitoring
+prometheus_data/
+grafana_data/
+
+# Secrets
+*.key
+*.crt
+*.p12
+secrets/
+vault_keys/
+
+# Logs
+logs/
+*.log
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Terraform & IaC
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Misc
+*.tmp
+.cache/
+.pytest_cache/
+.terraform-docs.md
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Backup files
+*.bak
+*.backup
+*~.swp
