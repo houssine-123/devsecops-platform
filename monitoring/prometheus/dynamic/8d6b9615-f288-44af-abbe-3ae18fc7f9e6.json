@@ -1,0 +1,13 @@
+[
+  {
+    "targets": [
+      "172.19.0.16:9100"
+    ],
+    "labels": {
+      "job": "dynamic-servers",
+      "server_name": "demo-server-01",
+      "server_id": "8d6b9615-f288-44af-abbe-3ae18fc7f9e6",
+      "container": "devsecops-server-demo-server-01"
+    }
+  }
+]

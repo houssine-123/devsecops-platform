@@ -1,0 +1,32 @@
+{
+  "name": "devsecops-backend",
+  "version": "1.0.0",
+  "description": "Backend API for DevSecOps application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "cross-env NODE_ENV=test jest --runInBand --coverage"
+  },
+  "keywords": [
+    "api",
+    "nodejs",
+    "express"
+  ],
+  "author": "DevSecOps Team",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dockerode": "^5.0.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "jest": "^29.6.1",
+    "nodemon": "^3.0.2",
+    "supertest": "^7.0.0"
+  }
+}

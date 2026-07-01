@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devsecops
+  namespace: argocd
+spec:
+  description: DevSecOps PFE Project - Ingenieur Deployment
+  sourceRepos:
+    - '*'
+  destinations:
+    - namespace: devsecops-platform
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'networking.k8s.io'
+      kind: IngressClass
+    - group: 'cert-manager.io'
+      kind: ClusterIssuer
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRole
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRoleBinding
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  orphanedResources:
+    warn: true
+  roles:
+    - name: ci-pipeline
+      description: Role for Jenkins CI pipeline
+      policies:
+        - p, proj:devsecops:ci-pipeline, applications, sync, devsecops/*, allow
+        - p, proj:devsecops:ci-pipeline, applications, get, devsecops/*, allow
+      jwtTokens: []

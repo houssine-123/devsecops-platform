@@ -1,0 +1,21 @@
+# Dockerfile pour un serveur avec Node Exporter
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Télécharger et installer Node Exporter
+RUN wget https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz -O /tmp/node_exporter.tar.gz && \
+    tar xzf /tmp/node_exporter.tar.gz -C /usr/local/bin --strip-components=1 && \
+    rm /tmp/node_exporter.tar.gz
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:9100/metrics || exit 1
+
+EXPOSE 9100
+
+CMD ["/usr/local/bin/node_exporter"]

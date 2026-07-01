@@ -3,6 +3,19 @@
 # ============================================================================
 
 groups:
+  - name: alertmanager-pipeline
+    interval: 15s
+    rules:
+      - alert: DevSecOpsWatchdog
+        expr: vector(1)
+        for: 0s
+        labels:
+          severity: info
+          component: monitoring
+        annotations:
+          summary: "DevSecOps alert pipeline is alive"
+          description: "This heartbeat alert confirms that Prometheus can send notifications to Alertmanager."
+
   - name: infrastructure
     interval: 15s
     rules:
@@ -99,7 +112,11 @@ groups:
 
       - alert: HighErrorRate
         expr: |
-          (sum(rate(http_requests_total{status=~"5.."}[5m])) by (job) / sum(rate(http_requests_total[5m])) by (job)) * 100 > 5
+          (
+            sum(rate(app_http_requests_total{status=~"5.."}[5m])) by (job)
+            /
+            sum(rate(app_http_requests_total[5m])) by (job)
+          ) * 100 > 5
         for: 5m
         labels:
           severity: warning
@@ -110,7 +127,10 @@ groups:
 
       - alert: HighResponseTime
         expr: |
-          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+          histogram_quantile(
+            0.95,
+            sum(rate(app_http_request_duration_seconds_bucket[5m])) by (job, le)
+          ) > 2
         for: 5m
         labels:
           severity: warning
@@ -118,6 +138,26 @@ groups:
         annotations:
           summary: "High Response Time"
           description: "95th percentile response time is {{ $value }}s. Performance degradation detected."
+
+      - alert: BackendDatabaseNotReady
+        expr: app_database_ready{job="backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "Backend database is not ready"
+          description: "The backend is running but cannot confirm database readiness."
+
+      - alert: DegradedServerDetected
+        expr: app_servers_degraded_total{job="backend"} > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "Degraded server detected"
+          description: "{{ $value }} server(s) are currently marked as degraded by the application."
 
   # ========================================================================
   # Database Alerts

@@ -1,0 +1,86 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: devsecops-platform
+  labels:
+    app: postgres-backup
+    component: backup
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+          containers:
+            - name: postgres-backup
+              image: postgres:15-alpine
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                - name: PGHOST
+                  value: postgres-service
+                - name: PGPORT
+                  value: "5432"
+                - name: PGDATABASE
+                  value: appdb
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secrets
+                      key: DB_USER
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secrets
+                      key: DB_PASSWORD
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  BACKUP_DIR="/backups"
+                  BACKUP_FILE="${BACKUP_DIR}/backup-$(date +%Y%m%d-%H%M%S).sql.gz"
+
+                  echo "[$(date)] Starting PostgreSQL backup to ${BACKUP_FILE}"
+                  pg_dump -Fc | gzip > "${BACKUP_FILE}"
+
+                  echo "[$(date)] Backup completed: ${BACKUP_FILE}"
+                  ls -lh "${BACKUP_DIR}/"
+
+                  # Keep only last 7 backups
+                  BACKUP_COUNT=$(ls -1 "${BACKUP_DIR}"/backup-*.sql.gz 2>/dev/null | wc -l)
+                  if [ "$BACKUP_COUNT" -gt 7 ]; then
+                    ls -t "${BACKUP_DIR}"/backup-*.sql.gz | tail -n +8 | xargs rm -f
+                    echo "[$(date)] Cleaned up old backups. Current count: $(ls -1 ${BACKUP_DIR}/backup-*.sql.gz | wc -l)"
+                  fi
+
+                  echo "[$(date)] Backup job finished successfully."
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backups
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "200m"
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: backup-pvc

@@ -13,6 +13,13 @@
   - `ingress.yaml` - Ingress controller
   - `pvc.yaml` - Persistent volumes
 
+- `monitoring/` - Kubernetes monitoring manifests
+  - `prometheus-*` - Prometheus deployment and config
+  - `grafana-*` - Grafana deployment, datasource and dashboards
+  - `node-exporter-*` - Node Exporter DaemonSet and service
+  - `kube-state-metrics-*` - Kubernetes state metrics
+  - `alertmanager-*` - Alertmanager deployment and service
+
 - `helm/` - Helm charts (templating)
   - `app-chart/` - Main application chart
 

@@ -1,8 +1,6 @@
-version: '3.9'
-
 services:
   # ============================================================================
-  # DATABASE
+  # DATABASE - PostgreSQL
   # ============================================================================
   postgres:
     image: postgres:14-alpine
@@ -23,9 +21,10 @@ services:
       retries: 5
     networks:
       - devsecops-network
+    restart: unless-stopped
 
   # ============================================================================
-  # BACKEND API
+  # BACKEND API - Node.js Express
   # ============================================================================
   backend:
     build:
@@ -39,15 +38,15 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-changeme}
       DB_NAME: ${DB_NAME:-appdb}
       APP_ENV: ${APP_ENV:-development}
-      APP_PORT: ${APP_PORT:-5000}
+      APP_PORT: 5000
     ports:
       - "5000:5000"
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - ./app/backend:/app
-      - /app/node_modules  # Si Node.js
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./monitoring/prometheus/dynamic:/app/prometheus-targets
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 15s
@@ -55,9 +54,10 @@ services:
       retries: 3
     networks:
       - devsecops-network
+    restart: unless-stopped
 
   # ============================================================================
-  # FRONTEND
+  # FRONTEND - React + Nginx
   # ============================================================================
   frontend:
     build:
@@ -65,62 +65,82 @@ services:
       dockerfile: Dockerfile
     container_name: devsecops-frontend
     environment:
-      REACT_APP_API_URL: http://localhost:5000/api
+      VITE_API_URL: http://backend:5000
     ports:
       - "3000:3000"
     depends_on:
       - backend
-    volumes:
-      - ./app/frontend:/app
-      - /app/node_modules
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
       interval: 15s
       timeout: 10s
       retries: 3
     networks:
       - devsecops-network
+    restart: unless-stopped
 
   # ============================================================================
-  # PROMETHEUS
+  # ADMINER - Database Management UI
+  # ============================================================================
+  adminer:
+    image: adminer:latest
+    container_name: devsecops-adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - devsecops-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # PROMETHEUS - Metrics Collection
   # ============================================================================
   prometheus:
     image: prom/prometheus:latest
     container_name: devsecops-prometheus
     ports:
-      - "9090:9090"
+      - "9091:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./monitoring/prometheus/rules.yml:/etc/prometheus/rules.yml
+      - ./monitoring/prometheus/dynamic:/etc/prometheus/dynamic
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
     networks:
       - devsecops-network
+    restart: unless-stopped
 
   # ============================================================================
-  # GRAFANA
+  # GRAFANA - Visualization & Dashboards (PORT: 4001 — 4000 taken by K8s LB)
   # ============================================================================
   grafana:
     image: grafana/grafana:latest
     container_name: devsecops-grafana
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin123}
-      GF_USERS_ALLOW_SIGN_UP: false
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: "lokiLogs"
     ports:
-      - "3000:3000"
+      - "4001:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       - prometheus
+      - loki
     networks:
       - devsecops-network
+    restart: unless-stopped
 
   # ============================================================================
-  # NODE EXPORTER (System Metrics)
+  # NODE EXPORTER - System Metrics
   # ============================================================================
   node-exporter:
     image: prom/node-exporter:latest
@@ -138,23 +158,174 @@ services:
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
     networks:
       - devsecops-network
+    restart: unless-stopped
 
   # ============================================================================
-  # ALERTMANAGER
+  # ALERTMANAGER - Alert Routing & Notifications
   # ============================================================================
   alertmanager:
     image: prom/alertmanager:latest
     container_name: devsecops-alertmanager
     ports:
-      - "9093:9093"
+      - "127.0.0.1:9094:9093"
     volumes:
       - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
       - alertmanager_data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
+      - '--web.listen-address=0.0.0.0:9093'
     networks:
       - devsecops-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # CADVISOR - Container Metrics
+  # ============================================================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: devsecops-cadvisor
+    ports:
+      - "8088:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - devsecops-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # POSTGRES EXPORTER - Database Metrics
+  # ============================================================================
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: devsecops-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-changeme}@postgres:5432/${DB_NAME:-appdb}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - devsecops-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # LOKI - Log Aggregation
+  # ============================================================================
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: devsecops-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    networks:
+      - devsecops-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # PROMTAIL - Log Shipper (Docker → Loki)
+  # ============================================================================
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: devsecops-promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./monitoring/promtail/config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - devsecops-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # VAULT - Secrets Management (Dev Mode)
+  # ============================================================================
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: devsecops-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "devsecops-root-token"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      VAULT_ADDR: "http://127.0.0.1:8200"
+    command: vault server -dev -dev-listen-address=0.0.0.0:8200
+    networks:
+      - devsecops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ============================================================================
+  # JENKINS - CI/CD Orchestration
+  # ============================================================================
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    image: devsecops-jenkins:local
+    container_name: devsecops-jenkins
+    ports:
+      - "8090:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false -Xmx512m"
+    networks:
+      - devsecops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================================================
+  # SONARQUBE - Code Quality Analysis
+  # ============================================================================
+  sonarqube:
+    image: sonarqube:lts-community
+    container_name: devsecops-sonarqube
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    networks:
+      - devsecops-network
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
 
 # ============================================================================
 # VOLUMES
@@ -164,6 +335,12 @@ volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  loki_data:
+  vault_data:
+  jenkins_home:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:
 
 # ============================================================================
 # NETWORKS

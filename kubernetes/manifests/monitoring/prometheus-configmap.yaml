@@ -1,0 +1,170 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: devsecops-platform
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'devsecops'
+        environment: 'production'
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager-service:9093']
+
+    rule_files:
+      - 'rules.yml'
+
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'node-exporter'
+        static_configs:
+          - targets: ['node-exporter-service:9100']
+        metrics_path: '/metrics'
+
+      - job_name: 'kube-state-metrics'
+        static_configs:
+          - targets: ['kube-state-metrics-service:8080']
+        metrics_path: '/metrics'
+
+      - job_name: 'backend'
+        static_configs:
+          - targets: ['backend-service:5000']
+        metrics_path: '/metrics'
+        scrape_interval: 10s
+        scrape_timeout: 5s
+
+  rules.yml: |
+    groups:
+      - name: infrastructure
+        interval: 15s
+        rules:
+          - alert: HighCPUUsage
+            expr: |
+              (100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance) * 100)) > 80
+            for: 5m
+            labels:
+              severity: warning
+              component: infrastructure
+            annotations:
+              summary: "High CPU Usage on {{ $labels.instance }}"
+              description: "CPU usage is {{ $value }}% on server {{ $labels.instance }}."
+
+          - alert: CriticalCPUUsage
+            expr: |
+              (100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance) * 100)) > 95
+            for: 2m
+            labels:
+              severity: critical
+              component: infrastructure
+            annotations:
+              summary: "Critical CPU Usage on {{ $labels.instance }}"
+              description: "CPU usage is {{ $value }}% on server {{ $labels.instance }}. Immediate action required!"
+
+          - alert: HighMemoryUsage
+            expr: |
+              (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+            for: 5m
+            labels:
+              severity: warning
+              component: infrastructure
+            annotations:
+              summary: "High Memory Usage on {{ $labels.instance }}"
+              description: "Memory usage is {{ $value }}% on server {{ $labels.instance }}."
+          - alert: CriticalMemoryUsage
+            expr: |
+              (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+            for: 2m
+            labels:
+              severity: critical
+              component: infrastructure
+            annotations:
+              summary: "Critical Memory Usage on {{ $labels.instance }}"
+              description: "Memory usage is {{ $value }}% on server {{ $labels.instance }}. Immediate action required!"
+
+          - alert: HighDiskUsage
+            expr: |
+              (1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})) * 100 > 75
+            for: 5m
+            labels:
+              severity: warning
+              component: infrastructure
+            annotations:
+              summary: "High Disk Usage on {{ $labels.instance }}"
+              description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }} on server {{ $labels.instance }}."
+
+          - alert: CriticalDiskUsage
+            expr: |
+              (1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})) * 100 > 90
+            for: 2m
+            labels:
+              severity: critical
+              component: infrastructure
+            annotations:
+              summary: "Critical Disk Usage on {{ $labels.instance }}"
+              description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }} on server {{ $labels.instance }}. Immediate action required!"
+
+      - name: application
+        interval: 15s
+        rules:
+          - alert: ServiceDown
+            expr: up{job="backend"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              component: application
+            annotations:
+              summary: "Service Down - Backend"
+              description: "Backend service is down. Service {{ $labels.job }} is not responding."
+
+          - alert: HighErrorRate
+            expr: |
+              (sum(rate(app_errors_total[5m])) by (job) / sum(rate(app_requests_total[5m])) by (job)) * 100 > 5
+            for: 5m
+            labels:
+              severity: warning
+              component: application
+            annotations:
+              summary: "High Error Rate - {{ $labels.job }}"
+              description: "Error rate is {{ $value }}% for service {{ $labels.job }}."
+
+      - name: kubernetes
+        interval: 15s
+        rules:
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[1h]) > 0
+            for: 5m
+            labels:
+              severity: warning
+              component: kubernetes
+            annotations:
+              summary: "Pod Crash Looping - {{ $labels.pod }}"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently."
+
+          - alert: PodDown
+            expr: kube_pod_status_phase{phase=~"Failed|Unknown"} == 1
+            for: 2m
+            labels:
+              severity: critical
+              component: kubernetes
+            annotations:
+              summary: "Pod Down - {{ $labels.pod }}"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is in an unhealthy phase ({{ $labels.phase }})."
+
+          - alert: NodeNotReady
+            expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+            for: 5m
+            labels:
+              severity: critical
+              component: kubernetes
+            annotations:
+              summary: "Node Not Ready - {{ $labels.node }}"
+              description: "Node {{ $labels.node }} is not in Ready state."

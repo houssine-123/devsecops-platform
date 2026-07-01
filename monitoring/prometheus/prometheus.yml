@@ -16,7 +16,7 @@ alerting:
   alertmanagers:
     - static_configs:
         - targets:
-            - localhost:9093
+            - alertmanager:9093
 
 # ============================================================================
 # Alert Rules
@@ -37,42 +37,72 @@ scrape_configs:
       - targets: ['localhost:9090']
 
   # ========================================================================
-  # Node Exporter (System Metrics)
+  # Node Exporter (System Metrics - CPU, RAM, Disk, Network)
   # ========================================================================
   - job_name: 'node-exporter'
     static_configs:
-      - targets: ['localhost:9100']
+      - targets: ['node-exporter:9100']
     metrics_path: '/metrics'
 
   # ========================================================================
-  # Backend Application
+  # Backend Application (Custom Metrics)
   # ========================================================================
   - job_name: 'backend'
     static_configs:
-      - targets: ['localhost:5000']
-    metrics_path: '/metrics'
+      - targets: ['backend:5000']
+    metrics_path: '/api/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
 
   # ========================================================================
-  # Docker Containers (if using cAdvisor)
+  # cAdvisor (Container Metrics - CPU, RAM per container)
   # ========================================================================
-  # - job_name: 'docker'
-  #   static_configs:
-  #     - targets: ['localhost:8080']
-  #   metrics_path: '/metrics'
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
 
   # ========================================================================
-  # PostgreSQL (if using postgres_exporter)
+  # PostgreSQL Exporter (Database Metrics)
   # ========================================================================
-  # - job_name: 'postgres'
-  #   static_configs:
-  #     - targets: ['localhost:9187']
-  #   metrics_path: '/metrics'
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
 
   # ========================================================================
-  # Kubernetes (if deployed on K8s)
+  # Real Ubuntu Server (172.20.10.6) - Node Exporter
   # ========================================================================
+  - job_name: 'ubuntu-server-real'
+    static_configs:
+      - targets: ['172.20.10.6:9100']
+        labels:
+          instance: 'ubuntu-server-pfe'
+          env: 'production'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # ========================================================================
+  # Dynamic Servers - auto-registered via file_sd when auto-deploy runs
+  # Files are written by the backend to /etc/prometheus/dynamic/*.json
+  # ========================================================================
+  - job_name: 'dynamic-servers'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/dynamic/*.json'
+        refresh_interval: 10s
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # ========================================================================
+  # Kubernetes (when deployed on K8s - uses kube-state-metrics)
+  # ========================================================================
+  # - job_name: 'kube-state-metrics'
+  #   static_configs:
+  #     - targets: ['kube-state-metrics:8080']
+  #
   # - job_name: 'kubelet'
   #   scheme: https
   #   tls_config:
@@ -83,7 +113,3 @@ scrape_configs:
   #   relabel_configs:
   #     - action: labelmap
   #       regex: __meta_kubernetes_node_label_(.+)
-  #
-  # - job_name: 'kube-state-metrics'
-  #   static_configs:
-  #     - targets: ['kube-state-metrics:8080']
