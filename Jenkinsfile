@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   environment {
-    REGISTRY         = 'houssineguidara12'
+    REGISTRY         = 'houssine-123'
     BACKEND_IMAGE    = "${REGISTRY}/devsecops-backend:${BUILD_NUMBER}"
     FRONTEND_IMAGE   = "${REGISTRY}/devsecops-frontend:${BUILD_NUMBER}"
     KUBE_NAMESPACE   = 'devsecops-platform'
