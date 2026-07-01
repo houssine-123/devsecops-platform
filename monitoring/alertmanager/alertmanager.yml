@@ -1,44 +1,107 @@
 # ============================================================================
-# Alertmanager Configuration - Local Development
+# Alertmanager Configuration - Docker Compose
+# ============================================================================
+# Email : Gmail SMTP — generate an App Password at:
+#         https://myaccount.google.com/apppasswords
+# Slack : Create an Incoming Webhook at:
+#         https://api.slack.com/apps → Incoming Webhooks → Add to workspace
 # ============================================================================
 
 global:
   resolve_timeout: 5m
+  # ── Gmail SMTP ────────────────────────────────────────────────────────────
+  smtp_from: 'ademmakni545@gmail.com'
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_auth_username: 'ademmakni545@gmail.com'
+  smtp_auth_password: 'GMAIL_APP_PASSWORD_HERE'   # ← replace with 16-char app password
+  smtp_require_tls: true
 
+# ── Routing tree ──────────────────────────────────────────────────────────────
 route:
   group_by: ['alertname', 'component', 'severity']
   group_wait: 10s
   group_interval: 5m
   repeat_interval: 4h
-  receiver: 'backend-webhook'
+  receiver: 'default'
+
   routes:
+    # Critical → email + Slack + webhook (fast: 5s wait, 30m repeat)
     - matchers:
         - severity="critical"
-      receiver: 'backend-critical'
+      receiver: 'critical'
       group_wait: 5s
+      repeat_interval: 30m
+      continue: false
+
+    # Warning → email + webhook
     - matchers:
         - severity="warning"
-      receiver: 'backend-warning'
-    - matchers:
-        - severity="info"
-      receiver: 'backend-webhook'
+      receiver: 'warning'
+      group_wait: 30s
+      repeat_interval: 4h
+      continue: false
 
+# ── Receivers ─────────────────────────────────────────────────────────────────
 receivers:
-  - name: 'backend-webhook'
+  # Default: backend webhook only
+  - name: 'default'
     webhook_configs:
       - url: 'http://backend:5000/api/alertmanager/webhook'
         send_resolved: true
 
-  - name: 'backend-critical'
+  # Critical: webhook + email + Slack
+  - name: 'critical'
     webhook_configs:
       - url: 'http://backend:5000/api/alertmanager/webhook'
         send_resolved: true
+    email_configs:
+      - to: 'ademmakni545@gmail.com'
+        headers:
+          Subject: '[CRITICAL] {{ .GroupLabels.alertname }} — {{ .CommonAnnotations.summary }}'
+        text: |
+          {{ range .Alerts }}
+          Alert:      {{ .Labels.alertname }}
+          Severity:   {{ .Labels.severity }}
+          Instance:   {{ .Labels.instance }}
+          Summary:    {{ .Annotations.summary }}
+          Description:{{ .Annotations.description }}
+          Fired at:   {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+          {{ end }}
+        send_resolved: true
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/REPLACE/WITH/YOUR_WEBHOOK'  # ← replace this
+        channel: '#alerts'
+        username: 'AlertManager'
+        icon_emoji: ':rotating_light:'
+        send_resolved: true
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+        title: ':rotating_light: [{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+        text: |
+          *Severity:* {{ .CommonLabels.severity }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          {{ range .Alerts }}• {{ .Annotations.description }}{{ end }}
 
-  - name: 'backend-warning'
+  # Warning: webhook + email
+  - name: 'warning'
     webhook_configs:
       - url: 'http://backend:5000/api/alertmanager/webhook'
         send_resolved: true
+    email_configs:
+      - to: 'ademmakni545@gmail.com'
+        headers:
+          Subject: '[WARNING] {{ .GroupLabels.alertname }} — {{ .CommonAnnotations.summary }}'
+        text: |
+          {{ range .Alerts }}
+          Alert:      {{ .Labels.alertname }}
+          Severity:   {{ .Labels.severity }}
+          Instance:   {{ .Labels.instance }}
+          Summary:    {{ .Annotations.summary }}
+          Description:{{ .Annotations.description }}
+          Fired at:   {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+          {{ end }}
+        send_resolved: true
 
+# ── Inhibition rules ──────────────────────────────────────────────────────────
 inhibit_rules:
   - source_matchers:
       - severity="critical"
