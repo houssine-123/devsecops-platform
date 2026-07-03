@@ -42,6 +42,8 @@ jenkins_home/
 # Monitoring
 prometheus_data/
 grafana_data/
+monitoring/alertmanager/alertmanager.yml
+.env.sonar
 
 # Secrets
 *.key

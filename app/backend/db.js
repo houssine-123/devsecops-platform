@@ -7,26 +7,53 @@
 
 const { Pool } = require('pg');
 
-// Configuration de la connexion
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'changeme',
-  database: process.env.DB_NAME || 'appdb',
-  max: 20, // Nombre max de connexions
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+// Pool créé paresseusement : configureDatabase() (secrets Vault) au démarrage,
+// sinon repli automatique sur les variables d'environnement au premier query().
+let pool = null;
 
-// Test de connexion
-pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL');
-});
+function buildPool(config = {}) {
+  const p = new Pool({
+    host: config.host || process.env.DB_HOST || 'localhost',
+    port: config.port || process.env.DB_PORT || 5432,
+    user: config.user || process.env.DB_USER || 'postgres',
+    password: config.password || process.env.DB_PASSWORD || 'changeme',
+    database: config.database || process.env.DB_NAME || 'appdb',
+    max: 20, // Nombre max de connexions
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  });
 
-pool.on('error', (err) => {
-  console.error('❌ PostgreSQL connection error:', err);
-});
+  p.on('connect', () => {
+    console.log('✅ Connected to PostgreSQL');
+  });
+
+  p.on('error', (err) => {
+    console.error('❌ PostgreSQL connection error:', err);
+  });
+
+  return p;
+}
+
+/**
+ * Configure le pool avec des credentials externes (ex: Vault).
+ * Doit être appelé avant initDatabase().
+ */
+function configureDatabase(config) {
+  if (pool) {
+    console.warn('⚠️  Database pool already configured — ignoring reconfiguration');
+    return;
+  }
+  pool = buildPool(config);
+  console.log(`✅ Database pool configured (credentials source: ${config.source || 'explicit'})`);
+}
+
+function getPool() {
+  if (!pool) {
+    pool = buildPool();
+    console.log('✅ Database pool configured (credentials source: env)');
+  }
+  return pool;
+}
 
 const toNumber = (value) => (value === null || value === undefined ? 0 : Number(value));
 
@@ -95,7 +122,7 @@ const buildUpdateQuery = (updates, columnMap) => {
 async function query(text, params) {
   const start = Date.now();
   try {
-    const res = await pool.query(text, params);
+    const res = await getPool().query(text, params);
     const duration = Date.now() - start;
     console.log('Executed query', { text, duration, rows: res.rowCount });
     return res;
@@ -376,6 +403,7 @@ async function getDashboardStats() {
 
 module.exports = {
   query,
+  configureDatabase,
   initDatabase,
   getServers,
   getServerById,

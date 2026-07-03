@@ -10,10 +10,10 @@
 global:
   resolve_timeout: 5m
   # ── Gmail SMTP ────────────────────────────────────────────────────────────
-  smtp_from: 'ademmakni545@gmail.com'
+  smtp_from: 'houssineguidara924@gmail.com'
   smtp_smarthost: 'smtp.gmail.com:587'
-  smtp_auth_username: 'ademmakni545@gmail.com'
-  smtp_auth_password: 'GMAIL_APP_PASSWORD_HERE'   # ← replace with 16-char app password
+  smtp_auth_username: 'houssineguidara924@gmail.com'
+  smtp_auth_password: 'GMAIL_APP_PASSWORD_HERE'   # ← never commit real value
   smtp_require_tls: true
 
 # ── Routing tree ──────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ receivers:
       - url: 'http://backend:5000/api/alertmanager/webhook'
         send_resolved: true
     email_configs:
-      - to: 'ademmakni545@gmail.com'
+      - to: 'houssineguidara924@gmail.com'
         headers:
           Subject: '[CRITICAL] {{ .GroupLabels.alertname }} — {{ .CommonAnnotations.summary }}'
         text: |
@@ -87,7 +87,7 @@ receivers:
       - url: 'http://backend:5000/api/alertmanager/webhook'
         send_resolved: true
     email_configs:
-      - to: 'ademmakni545@gmail.com'
+      - to: 'houssineguidara924@gmail.com'
         headers:
           Subject: '[WARNING] {{ .GroupLabels.alertname }} — {{ .CommonAnnotations.summary }}'
         text: |

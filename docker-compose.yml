@@ -39,10 +39,15 @@ services:
       DB_NAME: ${DB_NAME:-appdb}
       APP_ENV: ${APP_ENV:-development}
       APP_PORT: 5000
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: ${VAULT_TOKEN:-devsecops-root-token}
+      VAULT_SECRET_PATH: secret/data/devsecops
     ports:
       - "5000:5000"
     depends_on:
       postgres:
+        condition: service_healthy
+      vault:
         condition: service_healthy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

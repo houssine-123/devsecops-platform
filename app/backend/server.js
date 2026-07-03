@@ -17,6 +17,7 @@
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
+const vault = require('./vault');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
@@ -834,6 +835,10 @@ app.use((err, req, res, next) => {
 // Initialisation de la base de données
 async function startServer() {
   try {
+    console.log('🔐 Chargement des secrets depuis Vault...');
+    const dbConfig = await vault.loadDatabaseConfig();
+    db.configureDatabase(dbConfig);
+
     console.log('🔄 Initialisation de la base de données...');
     await db.initDatabase();
     dbInitialized = true;
