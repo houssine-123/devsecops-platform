@@ -78,13 +78,15 @@ pipeline {
     }
 
     // ── STEP 4: Trivy Security Scan ─────────────────────────────────────────
+    // --timeout 20m : le téléchargement de la DB dépasse les 5 min par défaut
+    // --skip-dirs node_modules : déjà couvert par le scan des lockfiles
     stage('Trivy - Source Scan') {
       steps {
-        sh 'trivy fs --cache-dir $TRIVY_CACHE_DIR --severity HIGH,CRITICAL --no-progress --format table .'
+        sh 'trivy fs --cache-dir $TRIVY_CACHE_DIR --timeout 20m --skip-dirs node_modules --severity HIGH,CRITICAL --no-progress --format table .'
       }
       post {
         always {
-          sh 'trivy fs --cache-dir $TRIVY_CACHE_DIR --severity HIGH,CRITICAL --format json --output trivy-source-report.json . || true'
+          sh 'trivy fs --cache-dir $TRIVY_CACHE_DIR --timeout 20m --skip-dirs node_modules --severity HIGH,CRITICAL --format json --output trivy-source-report.json . || true'
           archiveArtifacts artifacts: 'trivy-source-report.json', allowEmptyArchive: true
         }
       }
@@ -100,13 +102,13 @@ pipeline {
 
     stage('Trivy - Image Scan') {
       steps {
-        sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --severity HIGH,CRITICAL --no-progress --format table ${BACKEND_IMAGE}  || true"
-        sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --severity HIGH,CRITICAL --no-progress --format table ${FRONTEND_IMAGE} || true"
+        sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --timeout 20m --severity HIGH,CRITICAL --no-progress --format table ${BACKEND_IMAGE}  || true"
+        sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --timeout 20m --severity HIGH,CRITICAL --no-progress --format table ${FRONTEND_IMAGE} || true"
       }
       post {
         always {
-          sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --severity HIGH,CRITICAL --format json --output trivy-backend-image.json  ${BACKEND_IMAGE}  || true"
-          sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --severity HIGH,CRITICAL --format json --output trivy-frontend-image.json ${FRONTEND_IMAGE} || true"
+          sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --timeout 20m --severity HIGH,CRITICAL --format json --output trivy-backend-image.json  ${BACKEND_IMAGE}  || true"
+          sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --timeout 20m --severity HIGH,CRITICAL --format json --output trivy-frontend-image.json ${FRONTEND_IMAGE} || true"
           archiveArtifacts artifacts: 'trivy-*-image.json', allowEmptyArchive: true
         }
       }
