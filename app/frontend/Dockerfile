@@ -1,6 +1,10 @@
 # Stage 1: Build
 FROM node:20-alpine AS builder
 
+# Numéro de build injecté par Jenkins — affiché dans le footer de l'app
+ARG VITE_BUILD_NUMBER=dev
+ENV VITE_BUILD_NUMBER=$VITE_BUILD_NUMBER
+
 WORKDIR /build
 
 COPY package.json ./

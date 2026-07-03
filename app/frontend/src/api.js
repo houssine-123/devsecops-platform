@@ -57,6 +57,16 @@ export const createServer = async (serverData) => {
   }
 };
 
+export const deleteServer = async (serverId) => {
+  try {
+    const response = await api.delete(`/api/servers/${serverId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`❌ Failed to delete server ${serverId}:`, error.message);
+    throw error;
+  }
+};
+
 export const runServerHealthCheck = async (serverId) => {
   try {
     const response = await api.post(`/api/servers/${serverId}/healthcheck`);
@@ -122,6 +132,7 @@ export default {
   getDashboard,
   getServers,
   createServer,
+  deleteServer,
   runServerHealthCheck,
   simulateServerFailure,
   getServices,

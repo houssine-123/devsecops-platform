@@ -1,7 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from './api';
 import DeployServer from './components/DeployServer';
 import './App.css';
+
+const REFRESH_INTERVAL_MS = 15000;
+const BUILD_NUMBER = import.meta.env.VITE_BUILD_NUMBER || 'dev';
+
+function UsageBar({ label, value }) {
+  const pct = Math.max(0, Math.min(100, Math.round(value)));
+  const level = pct > 85 ? 'high' : pct > 60 ? 'mid' : 'low';
+  return (
+    <div className="usage" title={`${label}: ${pct}%`}>
+      <span className="usage-label">{label}</span>
+      <div className="usage-track">
+        <div className={`usage-fill ${level}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="usage-value">{pct}%</span>
+    </div>
+  );
+}
 
 function App() {
   const [backendStatus, setBackendStatus] = useState('checking...');
@@ -11,20 +28,19 @@ function App() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const toastId = useRef(0);
 
-  const [newServer, setNewServer] = useState({
-    name: '',
-    ip: '',
-    location: '',
-    tags: '',
-  });
+  const [newServer, setNewServer] = useState({ name: '', ip: '', location: '', tags: '' });
+  const [newService, setNewService] = useState({ name: '', type: 'web application', runningOn: '', owner: '' });
 
-  const [newService, setNewService] = useState({
-    name: '',
-    type: 'web application',
-    runningOn: '',
-    owner: '',
-  });
+  // ── Toasts (non bloquants, remplacent alert()) ────────────────────────────
+  const notify = useCallback((message, type = 'success') => {
+    const id = ++toastId.current;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+  }, []);
 
   const formatTime = (value) => {
     if (!value) return '-';
@@ -36,7 +52,6 @@ function App() {
     if (!previousDashboard || !previousStatus || !nextStatus || previousStatus === nextStatus) {
       return previousDashboard;
     }
-
     const current = previousDashboard.alertStatus || {};
     return {
       ...previousDashboard,
@@ -50,23 +65,27 @@ function App() {
     };
   };
 
+  const fetchAll = useCallback(async () => {
+    const [dashboardData, serversData, servicesData, alertsData] = await Promise.all([
+      api.getDashboard(),
+      api.getServers(),
+      api.getServices(),
+      api.getAlerts(),
+    ]);
+    setDashboard(dashboardData);
+    setServers(serversData);
+    setServices(servicesData);
+    setAlerts(alertsData);
+    setLastUpdated(new Date());
+  }, []);
+
+  // Chargement initial
   useEffect(() => {
     const initializeApp = async () => {
       try {
         await api.checkHealth();
         setBackendStatus('✓ Connected');
-
-        const [dashboardData, serversData, servicesData, alertsData] = await Promise.all([
-          api.getDashboard(),
-          api.getServers(),
-          api.getServices(),
-          api.getAlerts(),
-        ]);
-
-        setDashboard(dashboardData);
-        setServers(serversData);
-        setServices(servicesData);
-        setAlerts(alertsData);
+        await fetchAll();
       } catch (err) {
         setError(err.message || 'Le backend est inaccessible.');
         setBackendStatus('✗ Disconnected');
@@ -74,25 +93,29 @@ function App() {
         setLoading(false);
       }
     };
-
     initializeApp();
-  }, []);
+  }, [fetchAll]);
+
+  // Auto-refresh silencieux : les données restent à jour sans clic
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        await fetchAll();
+        setBackendStatus('✓ Connected');
+        setError(null);
+      } catch {
+        setBackendStatus('✗ Disconnected');
+      }
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [fetchAll]);
 
   const refreshData = async () => {
     setLoading(true);
     setError(null);
-
     try {
-      const [dashboardData, serversData, servicesData, alertsData] = await Promise.all([
-        api.getDashboard(),
-        api.getServers(),
-        api.getServices(),
-        api.getAlerts(),
-      ]);
-      setDashboard(dashboardData);
-      setServers(serversData);
-      setServices(servicesData);
-      setAlerts(alertsData);
+      await fetchAll();
     } catch (err) {
       setError(err.message || 'Erreur lors du rafraîchissement des données.');
     } finally {
@@ -102,12 +125,10 @@ function App() {
 
   const handleCreateServer = async (event) => {
     event.preventDefault();
-
     if (!newServer.name || !newServer.ip || !newServer.location) {
-      alert('Veuillez remplir tous les champs du serveur.');
+      notify('Veuillez remplir tous les champs du serveur.', 'error');
       return;
     }
-
     try {
       const serverData = {
         name: newServer.name,
@@ -115,25 +136,36 @@ function App() {
         location: newServer.location,
         tags: newServer.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
       };
-
       const createdServer = await api.createServer(serverData);
       setServers((prev) => [createdServer, ...prev]);
       setNewServer({ name: '', ip: '', location: '', tags: '' });
       setDashboard((prev) => prev && { ...prev, servers: prev.servers + 1 });
-      alert('Serveur ajouté avec succès.');
+      notify(`Serveur « ${createdServer.name} » ajouté.`);
     } catch (err) {
-      alert('Erreur: ' + err.message);
+      notify('Erreur: ' + err.message, 'error');
+    }
+  };
+
+  const handleDeleteServer = async (server) => {
+    if (!window.confirm(`Supprimer le serveur « ${server.name} » ?\nSon conteneur et sa cible Prometheus seront également retirés.`)) {
+      return;
+    }
+    try {
+      await api.deleteServer(server.id);
+      setServers((prev) => prev.filter((item) => item.id !== server.id));
+      setDashboard((prev) => prev && { ...prev, servers: Math.max(0, prev.servers - 1) });
+      notify(`Serveur « ${server.name} » supprimé (monitoring nettoyé).`);
+    } catch (err) {
+      notify('Erreur: ' + err.message, 'error');
     }
   };
 
   const handleCreateService = async (event) => {
     event.preventDefault();
-
     if (!newService.name || !newService.runningOn) {
-      alert('Veuillez choisir un service et un serveur de destination.');
+      notify('Veuillez choisir un service et un serveur de destination.', 'error');
       return;
     }
-
     try {
       const serviceData = {
         name: newService.name,
@@ -141,14 +173,13 @@ function App() {
         runningOn: newService.runningOn,
         owner: newService.owner || 'Ops Team',
       };
-
       const createdService = await api.createService(serviceData);
       setServices((prev) => [createdService, ...prev]);
       setNewService({ name: '', type: 'web application', runningOn: '', owner: '' });
       setDashboard((prev) => prev && { ...prev, services: prev.services + 1 });
-      alert('Service déployé avec succès.');
+      notify(`Service « ${createdService.name} » déployé.`);
     } catch (err) {
-      alert('Erreur: ' + err.message);
+      notify('Erreur: ' + err.message, 'error');
     }
   };
 
@@ -158,8 +189,9 @@ function App() {
       const updated = await api.updateAlert(alertId, { status: 'acknowledged' });
       setAlerts((prev) => prev.map((item) => (item.id === alertId ? updated : item)));
       setDashboard((prev) => updateAlertCounters(prev, currentAlert?.status, updated.status));
+      notify('Alerte prise en compte.');
     } catch (err) {
-      alert('Erreur: ' + err.message);
+      notify('Erreur: ' + err.message, 'error');
     }
   };
 
@@ -169,25 +201,54 @@ function App() {
       const updated = await api.updateAlert(alertId, { status: 'resolved' });
       setAlerts((prev) => prev.map((item) => (item.id === alertId ? updated : item)));
       setDashboard((prev) => updateAlertCounters(prev, currentAlert?.status, updated.status));
+      notify('Alerte résolue.');
     } catch (err) {
-      alert('Erreur: ' + err.message);
+      notify('Erreur: ' + err.message, 'error');
     }
   };
 
-  const renderStatusBadge = (status) => {
-    const classes = ['badge', status].join(' ');
-    return <span className={classes}>{status}</span>;
+  const handleHealthCheck = (server) => {
+    api.runServerHealthCheck(server.id)
+      .then((updated) => {
+        setServers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        notify(`Health check de « ${server.name} » : ${updated.status}.`);
+      })
+      .catch((err) => notify('Erreur: ' + err.message, 'error'));
   };
+
+  const handleSimulateFailure = (server) => {
+    api.simulateServerFailure(server.id)
+      .then((updated) => {
+        setServers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        notify(`Panne simulée sur « ${server.name} » — une alerte va être générée.`, 'warning');
+      })
+      .catch((err) => notify('Erreur: ' + err.message, 'error'));
+  };
+
+  const renderStatusBadge = (status) => <span className={`badge ${status}`}>{status}</span>;
+  const renderSeverityBadge = (severity) => <span className={`badge severity-${severity}`}>{severity}</span>;
 
   return (
     <div className="app">
+      {/* Toasts */}
+      <div className="toast-container">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`toast ${toast.type}`}>{toast.message}</div>
+        ))}
+      </div>
+
       <header className="header">
         <div>
           <h1>📊 Plateforme de Monitoring & Gestion d'Infrastructure</h1>
           <p className="subtitle">Vue synthétique des nœuds, services et alertes pour DevOps/System Engineers.</p>
         </div>
-        <div className={`status ${backendStatus.includes('✓') ? 'connected' : 'disconnected'}`}>
-          Backend: {backendStatus}
+        <div className="header-side">
+          <div className={`status ${backendStatus.includes('✓') ? 'connected' : 'disconnected'}`}>
+            Backend: {backendStatus}
+          </div>
+          <small className="last-updated">
+            {lastUpdated ? `Actualisé à ${lastUpdated.toLocaleTimeString()} · auto 15 s` : 'Chargement…'}
+          </small>
         </div>
       </header>
 
@@ -223,102 +284,134 @@ function App() {
           </div>
         </section>
 
-        <section className="grid-two">
-          <div className="panel panel-list">
-            <div className="panel-header">
-              <h2>🔧 Serveurs & Nœuds ({servers.length})</h2>
-              <button className="btn-small" onClick={refreshData}>Rafraîchir</button>
-            </div>
-            {loading ? (
-              <p>⏳ Chargement des serveurs...</p>
-            ) : (
+        <section className="panel panel-list">
+          <div className="panel-header">
+            <h2>🔧 Serveurs & Nœuds ({servers.length})</h2>
+            <button className="btn-small" onClick={refreshData}>Rafraîchir</button>
+          </div>
+          {loading ? (
+            <p>⏳ Chargement des serveurs...</p>
+          ) : (
+            <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Nom</th>
                     <th>IP</th>
                     <th>État</th>
+                    <th>Ressources</th>
                     <th>Localisation</th>
+                    <th>Tags</th>
                     <th>Dernier check</th>
-                    <th>Action</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {servers.map((server) => (
                     <tr key={server.id}>
-                      <td>{server.name}</td>
-                      <td>{server.ip}</td>
+                      <td className="cell-name">{server.name}</td>
+                      <td><code>{server.ip}</code></td>
                       <td>{renderStatusBadge(server.status)}</td>
+                      <td className="cell-usage">
+                        <UsageBar label="CPU" value={server.cpu} />
+                        <UsageBar label="RAM" value={server.memory} />
+                        <UsageBar label="DSK" value={server.disk} />
+                      </td>
                       <td>{server.location}</td>
-                      <td>{formatTime(server.lastHealthCheck)}</td>
                       <td>
-                        <button className="btn-small" onClick={() => api.runServerHealthCheck(server.id)
-                          .then((updated) => {
-                            setServers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-                            refreshData();
-                          })
-                          .catch((err) => alert('Erreur: ' + err.message))}
-                        >
-                          Check
-                        </button>
-                        <button className="btn-small warning" onClick={() => api.simulateServerFailure(server.id)
-                          .then((updated) => {
-                            setServers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-                            refreshData();
-                          })
-                          .catch((err) => alert('Erreur: ' + err.message))}
-                        >
-                          Simuler
-                        </button>
+                        <div className="tags">
+                          {(server.tags || []).map((tag) => (
+                            <span key={tag} className={`tag ${tag === 'auto-deployed' ? 'tag-auto' : ''}`}>{tag}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>{formatTime(server.lastHealthCheck)}</td>
+                      <td className="cell-actions">
+                        <button className="btn-small" onClick={() => handleHealthCheck(server)}>Check</button>
+                        <button className="btn-small warning" onClick={() => handleSimulateFailure(server)}>Simuler</button>
+                        <button className="btn-small danger" onClick={() => handleDeleteServer(server)}>✕</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </section>
+
+        <section className="grid-two">
+          <div className="panel panel-list">
+            <div className="panel-header">
+              <h2>🧩 Services déployés ({services.length})</h2>
+            </div>
+            {loading ? (
+              <p>⏳ Chargement des services...</p>
+            ) : services.length === 0 ? (
+              <p className="empty-hint">Aucun service — utilisez le formulaire ci-dessous.</p>
+            ) : (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nom</th>
+                      <th>Type</th>
+                      <th>Serveur</th>
+                      <th>État</th>
+                      <th>Équipe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {services.map((service) => (
+                      <tr key={service.id}>
+                        <td className="cell-name">{service.name}</td>
+                        <td>{service.type}</td>
+                        <td>{service.serverName || '-'}</td>
+                        <td>{renderStatusBadge(service.status)}</td>
+                        <td>{service.owner}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
           <div className="panel panel-list">
             <div className="panel-header">
               <h2>🚨 Alertes ({alerts.length})</h2>
-              <button className="btn-small" onClick={refreshData}>Rafraîchir</button>
             </div>
             {loading ? (
               <p>⏳ Chargement des alertes...</p>
             ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Titre</th>
-                    <th>Gravité</th>
-                    <th>État</th>
-                    <th>Entité</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {alerts.map((alert) => (
-                    <tr key={alert.id}>
-                      <td>{alert.title}</td>
-                      <td>{alert.severity}</td>
-                      <td>{renderStatusBadge(alert.status)}</td>
-                      <td>{alert.entityType}</td>
-                      <td>
-                        {alert.status === 'new' && (
-                          <button className="btn-small" onClick={() => handleAckAlert(alert.id)}>
-                            Acknowledge
-                          </button>
-                        )}
-                        {alert.status !== 'resolved' && (
-                          <button className="btn-small success" onClick={() => handleResolveAlert(alert.id)}>
-                            Resolve
-                          </button>
-                        )}
-                      </td>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Titre</th>
+                      <th>Gravité</th>
+                      <th>État</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {alerts.map((alert) => (
+                      <tr key={alert.id}>
+                        <td>{alert.title}</td>
+                        <td>{renderSeverityBadge(alert.severity)}</td>
+                        <td>{renderStatusBadge(alert.status)}</td>
+                        <td className="cell-actions">
+                          {alert.status === 'new' && (
+                            <button className="btn-small" onClick={() => handleAckAlert(alert.id)}>Ack</button>
+                          )}
+                          {alert.status !== 'resolved' && (
+                            <button className="btn-small success" onClick={() => handleResolveAlert(alert.id)}>Resolve</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </section>
@@ -356,9 +449,7 @@ function App() {
                 value={newServer.tags}
                 onChange={(e) => setNewServer({ ...newServer, tags: e.target.value })}
               />
-              <button type="submit" className="btn-submit">
-                Créer le serveur
-              </button>
+              <button type="submit" className="btn-submit">Créer le serveur</button>
             </form>
           </div>
 
@@ -399,13 +490,16 @@ function App() {
                 value={newService.owner}
                 onChange={(e) => setNewService({ ...newService, owner: e.target.value })}
               />
-              <button type="submit" className="btn-submit">
-                Déployer le service
-              </button>
+              <button type="submit" className="btn-submit">Déployer le service</button>
             </form>
           </div>
         </section>
       </main>
+
+      <footer className="footer">
+        <span>Plateforme DevSecOps — PFE 2026</span>
+        <span className="build-info">Build <strong>#{BUILD_NUMBER}</strong> · déployé via Jenkins + ArgoCD (GitOps)</span>
+      </footer>
     </div>
   );
 }

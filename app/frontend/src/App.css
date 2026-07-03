@@ -286,6 +286,176 @@ body {
   color: #7f1d1d;
 }
 
+/* ── Header side (status + horodatage) ─────────────────────── */
+.header-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.last-updated {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+/* ── Toasts (notifications non bloquantes) ─────────────────── */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+}
+
+.toast {
+  padding: 14px 18px;
+  border-radius: 12px;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  animation: toast-in 0.25s ease;
+}
+
+.toast.success { background: #16a34a; }
+.toast.error   { background: #dc2626; }
+.toast.warning { background: #d97706; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Barres d'utilisation CPU/RAM/Disque ───────────────────── */
+.cell-usage {
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.usage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.usage-label {
+  width: 30px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.usage-track {
+  flex: 1;
+  height: 7px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+
+.usage-fill.low  { background: #22c55e; }
+.usage-fill.mid  { background: #f59e0b; }
+.usage-fill.high { background: #ef4444; }
+
+.usage-value {
+  width: 36px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 700;
+  color: #374151;
+}
+
+/* ── Tags des serveurs ─────────────────────────────────────── */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 160px;
+}
+
+.tag {
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tag.tag-auto {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+/* ── Badges de gravité des alertes ─────────────────────────── */
+.badge.severity-critical { background: #fee2e2; color: #b91c1c; }
+.badge.severity-warning  { background: #fef3c7; color: #92400e; }
+.badge.severity-info     { background: #dbeafe; color: #1d4ed8; }
+
+/* ── Divers ────────────────────────────────────────────────── */
+.btn-small.danger { background: #dc2626; }
+.btn-small.danger:hover { background: #b91c1c; }
+
+.cell-actions {
+  white-space: nowrap;
+}
+
+.cell-actions .btn-small {
+  margin-right: 6px;
+}
+
+.cell-name {
+  font-weight: 700;
+}
+
+.data-table code {
+  background: #f3f4f6;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.empty-hint {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.footer {
+  margin-top: 30px;
+  padding: 18px 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: #cbd5e1;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.build-info strong {
+  color: #ffffff;
+}
+
 @media (max-width: 1080px) {
   .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -294,6 +464,11 @@ body {
   .grid-two,
   .form-section {
     grid-template-columns: 1fr;
+  }
+
+  .header-side {
+    align-items: center;
+    width: 100%;
   }
 }
 

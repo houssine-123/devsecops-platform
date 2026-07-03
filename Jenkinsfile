@@ -96,7 +96,7 @@ pipeline {
     stage('Docker Build') {
       steps {
         sh "docker build -t ${BACKEND_IMAGE}  -f app/backend/Dockerfile  app/backend"
-        sh "docker build -t ${FRONTEND_IMAGE} -f app/frontend/Dockerfile app/frontend"
+        sh "docker build --build-arg VITE_BUILD_NUMBER=${BUILD_NUMBER} -t ${FRONTEND_IMAGE} -f app/frontend/Dockerfile app/frontend"
       }
     }
 
