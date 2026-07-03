@@ -169,8 +169,11 @@ pipeline {
             )]) {
               // --plaintext : le NodePort 30088 sert du HTTP (pas de TLS) ; sans ce flag
               // le CLI pose une question interactive et échoue (EOF) sous Jenkins
+              // retry(3) : le sync interroge GitHub, sujet aux coupures réseau transitoires
               sh "argocd login ${env.ARGOCD_SERVER} --username \$ARGO_USER --password \$ARGO_PASS --insecure --plaintext"
-              sh "argocd app sync devsecops-platform --plaintext"
+              retry(3) {
+                sh "argocd app sync devsecops-platform --plaintext"
+              }
               sh "argocd app wait devsecops-platform --timeout 180 --plaintext"
             }
           } else {
