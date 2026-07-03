@@ -144,9 +144,11 @@ pipeline {
               usernameVariable: 'ARGO_USER',
               passwordVariable: 'ARGO_PASS'
             )]) {
-              sh "argocd login ${env.ARGOCD_SERVER} --username \$ARGO_USER --password \$ARGO_PASS --insecure"
-              sh "argocd app sync devsecops-platform"
-              sh "argocd app wait devsecops-platform --timeout 180"
+              // --plaintext : le NodePort 30088 sert du HTTP (pas de TLS) ; sans ce flag
+              // le CLI pose une question interactive et échoue (EOF) sous Jenkins
+              sh "argocd login ${env.ARGOCD_SERVER} --username \$ARGO_USER --password \$ARGO_PASS --insecure --plaintext"
+              sh "argocd app sync devsecops-platform --plaintext"
+              sh "argocd app wait devsecops-platform --timeout 180 --plaintext"
             }
           } else {
             echo "ArgoCD CLI not available or ARGOCD_SERVER not set — falling back to kubectl"
