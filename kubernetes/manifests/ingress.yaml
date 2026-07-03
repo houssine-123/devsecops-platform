@@ -4,12 +4,12 @@ metadata:
   name: app-ingress
   namespace: devsecops-platform
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Pas de rewrite-target : le backend attend les chemins /api/... intacts
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
-    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    # selfsigned : Let's Encrypt ne peut pas valider un hôte local (devsecops.local)
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
 spec:
   ingressClassName: nginx
   tls:

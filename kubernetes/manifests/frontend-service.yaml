@@ -12,4 +12,5 @@ spec:
   - port: 80
     targetPort: 3000
     name: http
-  type: LoadBalancer
+  # ClusterIP: exposed via ingress-nginx (HTTPS) instead of a direct LoadBalancer
+  type: ClusterIP
