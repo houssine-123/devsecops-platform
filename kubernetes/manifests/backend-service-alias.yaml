@@ -1,0 +1,17 @@
+# Alias "backend" du backend-service : le nginx du frontend proxifie /api vers
+# http://backend:5000 (nom utilisé par Docker Compose). Ce Service permet au même
+# nginx.conf de fonctionner aussi sur Kubernetes sans rebuild de l'image.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: devsecops-platform
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 5000
+    targetPort: 5000
+  type: ClusterIP
