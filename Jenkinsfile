@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   environment {
-    REGISTRY         = 'houssine-123'
+    REGISTRY         = 'houssineguidara12'   // compte Docker Hub (≠ username GitHub)
     BACKEND_IMAGE    = "${REGISTRY}/devsecops-backend:${BUILD_NUMBER}"
     FRONTEND_IMAGE   = "${REGISTRY}/devsecops-frontend:${BUILD_NUMBER}"
     KUBE_NAMESPACE   = 'devsecops-platform'
