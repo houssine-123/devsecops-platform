@@ -18,6 +18,7 @@ const express = require('express');
 const cors = require('cors');
 const db = require('./db');
 const vault = require('./vault');
+const prometheus = require('./prometheus');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
@@ -264,13 +265,73 @@ app_servers_degraded_total ${stats.serverStatus.degraded}
 });
 
 // ============================================================
+// SUPERVISION TEMPS RÉEL (données Prometheus)
+// ============================================================
+
+app.get('/api/monitoring/overview', async (req, res) => {
+  try {
+    const [host, requestRate, targets] = await Promise.all([
+      prometheus.getHostOverview(),
+      prometheus.getBackendRequestRate().catch(() => null),
+      prometheus.getTargets().catch(() => []),
+    ]);
+    res.status(200).json({
+      host,
+      requestRate,
+      targets,
+      targetsUp: targets.filter((t) => t.health === 'up').length,
+      targetsTotal: targets.length,
+      source: 'prometheus',
+    });
+  } catch (err) {
+    totalErrors++;
+    res.status(503).json({ error: 'Prometheus unreachable', message: err.message });
+  }
+});
+
+app.get('/api/monitoring/history', async (req, res) => {
+  try {
+    const minutes = Math.min(360, Math.max(5, parseInt(req.query.minutes, 10) || 30));
+    const history = await prometheus.getHostHistory(minutes);
+    res.status(200).json(history);
+  } catch (err) {
+    totalErrors++;
+    res.status(503).json({ error: 'Prometheus unreachable', message: err.message });
+  }
+});
+
+// ============================================================
 // SERVEURS / NŒUDS
 // ============================================================
 
 app.get('/api/servers', async (req, res) => {
   try {
     const servers = await db.getServers();
-    res.status(200).json({ count: servers.length, servers });
+
+    // Remplace les valeurs simulées par les vraies métriques Prometheus
+    // pour les serveurs auto-déployés (associés via le label server_id).
+    let realMetrics = {};
+    try {
+      realMetrics = await prometheus.getDynamicServerMetrics();
+    } catch {
+      // Prometheus indisponible : on garde les valeurs en base
+    }
+
+    const enriched = servers.map((server) => {
+      const real = realMetrics[server.id];
+      if (real) {
+        return {
+          ...server,
+          cpu: real.cpu ?? server.cpu,
+          memory: real.memory ?? server.memory,
+          disk: real.disk ?? server.disk,
+          metricsSource: 'prometheus',
+        };
+      }
+      return { ...server, metricsSource: 'simulated' };
+    });
+
+    res.status(200).json({ count: enriched.length, servers: enriched });
   } catch (err) {
     totalErrors++;
     res.status(500).json({ error: 'Failed to fetch servers' });

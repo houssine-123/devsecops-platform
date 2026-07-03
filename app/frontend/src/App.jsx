@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from './api';
 import DeployServer from './components/DeployServer';
+import LiveMonitoring from './components/LiveMonitoring';
 import './App.css';
 
 const REFRESH_INTERVAL_MS = 15000;
@@ -284,6 +285,8 @@ function App() {
           </div>
         </section>
 
+        <LiveMonitoring />
+
         <section className="panel panel-list">
           <div className="panel-header">
             <h2>🔧 Serveurs & Nœuds ({servers.length})</h2>
@@ -316,6 +319,9 @@ function App() {
                         <UsageBar label="CPU" value={server.cpu} />
                         <UsageBar label="RAM" value={server.memory} />
                         <UsageBar label="DSK" value={server.disk} />
+                        <span className={`metrics-source ${server.metricsSource === 'prometheus' ? 'real' : 'sim'}`}>
+                          {server.metricsSource === 'prometheus' ? '⚡ métriques réelles' : '⋯ simulé'}
+                        </span>
                       </td>
                       <td>{server.location}</td>
                       <td>

@@ -27,6 +27,26 @@ export const checkHealth = async () => {
   }
 };
 
+export const getMonitoringOverview = async () => {
+  try {
+    const response = await api.get('/api/monitoring/overview');
+    return response.data;
+  } catch (error) {
+    console.error('❌ Failed to fetch monitoring overview:', error.message);
+    throw error;
+  }
+};
+
+export const getMonitoringHistory = async (minutes = 30) => {
+  try {
+    const response = await api.get(`/api/monitoring/history?minutes=${minutes}`);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Failed to fetch monitoring history:', error.message);
+    throw error;
+  }
+};
+
 export const getDashboard = async () => {
   try {
     const response = await api.get('/api/dashboard');
@@ -129,6 +149,8 @@ export const updateAlert = async (alertId, updateData) => {
 
 export default {
   checkHealth,
+  getMonitoringOverview,
+  getMonitoringHistory,
   getDashboard,
   getServers,
   createServer,

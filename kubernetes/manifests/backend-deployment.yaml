@@ -61,6 +61,9 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: JWT_SECRET
+        # Supervision temps réel : l'app interroge Prometheus directement
+        - name: PROMETHEUS_URL
+          value: "http://prometheus-service:9090"
         resources:
           requests:
             memory: "128Mi"
