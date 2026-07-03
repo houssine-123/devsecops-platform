@@ -44,6 +44,8 @@ prometheus_data/
 grafana_data/
 monitoring/alertmanager/alertmanager.yml
 .env.sonar
+# Cibles Prometheus ecrites par le backend a l'execution (etat runtime)
+monitoring/prometheus/dynamic/*.json
 
 # Secrets
 *.key
