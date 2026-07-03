@@ -133,6 +133,29 @@ pipeline {
       }
     }
 
+    // ── STEP 6bis: GitOps — épingler le tag d'image dans les manifests ──────
+    // ArgoCD ne redéploie que si les manifests changent : on committe le tag
+    // du build dans git, puis le sync (étape 7) fait rouler les pods.
+    stage('Update Manifests (GitOps)') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'github-credentials',
+          usernameVariable: 'GIT_USER',
+          passwordVariable: 'GIT_TOKEN'
+        )]) {
+          sh """
+            sed -i 's|image: ${REGISTRY}/devsecops-backend:.*|image: ${BACKEND_IMAGE}|'  kubernetes/manifests/backend-deployment.yaml
+            sed -i 's|image: ${REGISTRY}/devsecops-frontend:.*|image: ${FRONTEND_IMAGE}|' kubernetes/manifests/frontend-deployment.yaml
+            git config user.email 'jenkins@devsecops.local'
+            git config user.name  'Jenkins CI'
+            git add kubernetes/manifests/backend-deployment.yaml kubernetes/manifests/frontend-deployment.yaml
+            git diff --cached --quiet || git commit -m 'CI: deploy build #${BUILD_NUMBER} [skip ci]'
+            git push https://\$GIT_USER:\$GIT_TOKEN@github.com/houssine-123/devsecops-platform.git HEAD:master
+          """
+        }
+      }
+    }
+
     // ── STEP 7: Deploy via ArgoCD (or kubectl fallback) ─────────────────────
     stage('Deploy') {
       steps {
