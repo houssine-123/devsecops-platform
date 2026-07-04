@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: houssineguidara12/devsecops-backend:21
+        image: houssineguidara12/devsecops-backend:23
         ports:
         - containerPort: 5000
         env:
