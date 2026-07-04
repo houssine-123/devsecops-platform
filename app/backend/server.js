@@ -35,6 +35,9 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.APP_PORT || 5000;
 
+// Ne pas divulguer la technologie du serveur (hotspot SonarQube)
+app.disable('x-powered-by');
+
 app.use(cors());
 app.use(express.json());
 
@@ -459,7 +462,8 @@ app.post('/api/servers/auto-provision', async (req, res) => {
 
     const vmIP = stdout.trim().split('\n').pop();
 
-    if (!vmIP || !vmIP.match(/\d+\.\d+\.\d+\.\d+/)) {
+    // Regex ancrée et bornée : pas de backtracking possible (hotspot SonarQube)
+    if (!vmIP || !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(vmIP)) {
       throw new Error(`Failed to get valid IP from provisioning. Output: ${stdout}`);
     }
 
