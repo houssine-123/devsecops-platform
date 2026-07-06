@@ -72,15 +72,23 @@ flowchart LR
 | # | Étape | Détail |
 |---|---|---|
 | 1 | **Git Checkout** | Récupération du code depuis GitHub |
-| 2 | **Build** | `npm ci` backend + frontend, build Vite production |
-| 3 | **SonarQube Analysis + Quality Gate** | Analyse statique ; le pipeline **échoue si le gate échoue** (webhook temps réel) |
-| 4 | **Trivy — scan source** | Vulnérabilités HIGH/CRITICAL dans les dépendances (lockfiles) |
-| 5 | **Docker Build + Trivy — scan images** | Build des 2 images, scan OS + packages, rapports JSON archivés |
+| 2 | **Build + Tests unitaires** | `npm ci` backend/frontend, `npm test` (jest + supertest, couverture lcov), build Vite |
+| 3 | **SonarQube Analysis + Quality Gate** | Analyse statique SAST + couverture ; le pipeline **échoue si le gate échoue** (webhook temps réel) |
+| 4 | **Trivy — scan source (SCA)** | Vulnérabilités HIGH/CRITICAL dans les dépendances (lockfiles) |
+| 4bis | **Gitleaks — Secret Scanning** | **BLOQUANT** : aucun secret ne peut atteindre une image (allowlist pour les secrets de démo K8s) |
+| 4ter | **Checkov — IaC Scan** | Analyse des manifests Kubernetes (bonnes pratiques sécurité) |
+| 5 | **Docker Build + Trivy — scan images** | Build des 2 images ; **CRITICAL = build bloqué**, HIGH = rapporté |
 | 6 | **Docker Push** | Publication sur Docker Hub avec tag = numéro de build + `latest` |
 | 6bis | **Update Manifests (GitOps)** | Le pipeline committe le nouveau tag dans `kubernetes/manifests/` → git est la source de vérité |
-| 7 | **Deploy** | `argocd app sync` (retry 3×) — ArgoCD fait converger le cluster, les pods roulent sans interruption |
+| 7 | **Deploy** | `argocd app sync` (retry 3×) — ArgoCD fait converger le cluster, rolling update sans interruption |
+| 8 | **DAST — OWASP ZAP** | Scan dynamique de l'application déployée (baseline), rapport HTML archivé |
 
-**Preuve de fonctionnement** : build #19 — 13 étapes vertes en ~3,5 min, pods redéployés automatiquement en image `:19`, application `Synced + Healthy` dans ArgoCD.
+**Preuve de fonctionnement** : pipeline 15 étapes couvrant SAST + SCA + secret scanning + IaC + scan d'images + DAST. Le secret scanning a détecté et permis de révoquer un token d'API réellement exposé dès sa première exécution.
+
+### Sécurité runtime (hors pipeline)
+
+- **Falco** (driver eBPF) surveille les appels système des conteneurs en production et alerte en temps réel sur les comportements suspects (lecture de `/etc/shadow`, shell dans un conteneur, etc.) — testé avec un scénario d'attaque réel.
+- **Pod Security Standards** niveau *baseline* (audit + warn) appliqués au namespace applicatif.
 
 ## 📋 Conformité au cahier des charges
 
@@ -88,7 +96,13 @@ flowchart LR
 |---|---|---|
 | Pipeline CI/CD 7 étapes | `Jenkinsfile` (13 stages dont GitOps) | Build #19 100 % vert |
 | Analyse qualité (SonarQube) | Projet `devsecops-pfe`, Quality Gate bloquant | http://localhost:9000 |
-| Scan sécurité (Trivy) | Source + images, seuils HIGH/CRITICAL | 15 CVE HIGH détectées et rapportées |
+| Scan sécurité (Trivy) | Source + images, CRITICAL bloquant | 15 CVE HIGH rapportées, 0 CRITICAL |
+| Secret scanning (Gitleaks) | Stage CI bloquant + allowlist secrets démo | Token d'API exposé détecté et révoqué |
+| Scan IaC (Checkov) | Manifests Kubernetes | Rapport archivé à chaque build |
+| Tests unitaires | jest + supertest, couverture → SonarQube | 5 tests, exécutés dans le pipeline |
+| DAST (OWASP ZAP) | Scan dynamique du staging | Rapport HTML archivé |
+| Sécurité runtime (Falco) | Détection d'intrusion eBPF | Lecture /etc/shadow détectée en temps réel |
+| Pod Security Standards | baseline audit+warn sur le namespace | Labels PSS appliqués |
 | Registry d'images | Docker Hub, tags immuables par build | `houssineguidara12/devsecops-*` |
 | Déploiement GitOps (ArgoCD) | auto-sync + selfHeal + prune, commits « Jenkins CI » | http://localhost:30088 |
 | Orchestration Kubernetes | 15+ manifests : Deployments, Services, Ingress, CronJob, RBAC, NetworkPolicy | namespace `devsecops-platform` |
