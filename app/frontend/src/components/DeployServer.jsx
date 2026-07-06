@@ -28,7 +28,7 @@ export default function DeployServer() {
 
     setLoading(true);
     setError(null);
-    setStatus('🚀 Démarrage du déploiement (~10 secondes)...');
+    setStatus('Déploiement en cours (~10 secondes)…');
     setResult(null);
 
     try {
@@ -47,12 +47,12 @@ export default function DeployServer() {
         throw new Error(data.error || 'Erreur lors du déploiement');
       }
 
-      setStatus('✅ Serveur déployé avec succès!');
+      setStatus('');
       setResult(data);
       setFormData({ name: '', location: 'virtualbox' });
 
     } catch (err) {
-      setError(`❌ Erreur: ${err.message}`);
+      setError(`Erreur : ${err.message}`);
       setStatus('');
     } finally {
       setLoading(false);
@@ -60,19 +60,21 @@ export default function DeployServer() {
   };
 
   return (
-    <div className="panel panel-form" style={{ backgroundColor: '#667eea', color: 'white', marginBottom: '20px' }}>
-      <h2>🚀 Déploiement Automatique de Serveur</h2>
+    <div className="panel panel-form">
+      <h2>Déploiement automatique</h2>
+      <p className="form-hint">
+        Provisionne un conteneur node-exporter réel, auto-enregistré dans Prometheus.
+      </p>
 
       <form className="management-form" onSubmit={handleDeploy}>
         <input
           type="text"
           name="name"
-          placeholder="Nom du serveur (ex: web-server-1)"
+          placeholder="Nom du serveur (ex : web-server-1)"
           value={formData.name}
           onChange={handleChange}
           disabled={loading}
           required
-          style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}
         />
 
         <select
@@ -80,44 +82,32 @@ export default function DeployServer() {
           value={formData.location}
           onChange={handleChange}
           disabled={loading}
-          style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}
         >
-          <option value="virtualbox" style={{ color: 'black' }}>VirtualBox (Local)</option>
-          <option value="cloud" style={{ color: 'black' }}>Cloud (Future)</option>
+          <option value="virtualbox">Conteneur local (Docker)</option>
+          <option value="cloud">Cloud (à venir)</option>
         </select>
 
-        <button
-          type="submit"
-          className="btn-submit"
-          disabled={loading}
-          style={{ backgroundColor: '#ffb700', color: '#333', marginTop: '10px' }}
-        >
-          {loading ? '⏳ Déploiement en cours...' : '🚀 Déployer le Serveur'}
+        <button type="submit" className="btn-submit" disabled={loading}>
+          {loading ? 'Déploiement en cours…' : 'Déployer le serveur'}
         </button>
       </form>
 
-      {status && (
-        <p style={{ marginTop: '15px', padding: '10px', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: '4px' }}>
-          {status}
-        </p>
-      )}
+      {status && <p className="deploy-status">{status}</p>}
 
       {error && (
-        <p style={{ marginTop: '15px', padding: '10px', backgroundColor: 'rgba(255,59,48,0.8)', borderRadius: '4px' }}>
+        <div className="error-box" style={{ marginTop: '12px' }}>
           {error}
-        </p>
+        </div>
       )}
 
       {result && (
-        <div style={{ marginTop: '15px', padding: '15px', backgroundColor: 'rgba(76,175,80,0.9)', borderRadius: '4px' }}>
-          <h3>✅ Succès!</h3>
-          <p><strong>Serveur:</strong> {result.server.name}</p>
-          <p><strong>IP:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '4px' }}>{result.server.ip}</code></p>
-          <p><strong>Statut:</strong> {result.server.status}</p>
-          {result.container && (
-            <p><strong>Container:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '4px' }}>{result.container.name}</code></p>
-          )}
-          <p>🔗 Le serveur est maintenant en monitoring!</p>
+        <div className="deploy-result">
+          <strong>Serveur déployé avec succès</strong>
+          <span>Nom : {result.server.name}</span>
+          <span>IP : <code>{result.server.ip}</code></span>
+          <span>Statut : {result.server.status}</span>
+          {result.container && <span>Conteneur : <code>{result.container.name}</code></span>}
+          <span>Le serveur est maintenant supervisé par Prometheus.</span>
         </div>
       )}
     </div>

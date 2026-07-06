@@ -33,12 +33,11 @@ function Sparkline({ series, color }) {
   );
 }
 
-function Gauge({ label, value, icon }) {
+function Gauge({ label, value }) {
   const pct = value === null || value === undefined ? null : Math.round(value);
   const level = pct === null ? 'low' : pct > 85 ? 'high' : pct > 60 ? 'mid' : 'low';
   return (
     <div className="gauge">
-      <span className="gauge-icon">{icon}</span>
       <div className="gauge-body">
         <span className="gauge-label">{label}</span>
         <strong className={`gauge-value ${level}`}>{pct === null ? '—' : `${pct}%`}</strong>
@@ -78,7 +77,7 @@ export default function LiveMonitoring() {
   if (unavailable) {
     return (
       <section className="panel live-monitoring">
-        <div className="panel-header"><h2>📡 Supervision temps réel</h2></div>
+        <div className="panel-header"><h2>Supervision temps réel</h2></div>
         <p className="empty-hint">Prometheus est momentanément injoignable — nouvelles tentatives automatiques.</p>
       </section>
     );
@@ -87,17 +86,16 @@ export default function LiveMonitoring() {
   return (
     <section className="panel live-monitoring">
       <div className="panel-header">
-        <h2>📡 Supervision temps réel</h2>
-        <span className="source-chip">source : Prometheus</span>
+        <h2>Supervision temps réel</h2>
+        <span className="source-chip">Prometheus</span>
       </div>
 
       <div className="live-grid">
         <div className="live-gauges">
-          <Gauge label="CPU hôte" value={overview?.host?.cpu} icon="🧠" />
-          <Gauge label="Mémoire hôte" value={overview?.host?.memory} icon="💾" />
-          <Gauge label="Disque hôte" value={overview?.host?.disk} icon="🗄️" />
+          <Gauge label="CPU hôte" value={overview?.host?.cpu} />
+          <Gauge label="Mémoire hôte" value={overview?.host?.memory} />
+          <Gauge label="Disque hôte" value={overview?.host?.disk} />
           <div className="gauge">
-            <span className="gauge-icon">🎯</span>
             <div className="gauge-body">
               <span className="gauge-label">Cibles de scrape</span>
               <strong className={`gauge-value ${overview && overview.targetsUp === overview.targetsTotal ? 'low' : 'high'}`}>
@@ -113,11 +111,11 @@ export default function LiveMonitoring() {
         <div className="live-charts">
           <div className="chart-card">
             <span className="chart-title">CPU — 30 dernières minutes</span>
-            <Sparkline series={history?.cpu} color="#3b82f6" />
+            <Sparkline series={history?.cpu} color="#4f8ef7" />
           </div>
           <div className="chart-card">
             <span className="chart-title">Mémoire — 30 dernières minutes</span>
-            <Sparkline series={history?.memory} color="#8b5cf6" />
+            <Sparkline series={history?.memory} color="#a78bfa" />
           </div>
         </div>
       </div>

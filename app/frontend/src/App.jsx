@@ -239,17 +239,20 @@ function App() {
       </div>
 
       <header className="header">
-        <div>
-          <h1>📊 Plateforme de Monitoring & Gestion d'Infrastructure</h1>
-          <p className="subtitle">Vue synthétique des nœuds, services et alertes pour DevOps/System Engineers.</p>
+        <div className="brand">
+          <div className="brand-mark">DS</div>
+          <div>
+            <h1>DevSecOps Platform</h1>
+            <p className="subtitle">Supervision d'infrastructure · nœuds, services & alertes</p>
+          </div>
         </div>
         <div className="header-side">
-          <div className={`status ${backendStatus.includes('✓') ? 'connected' : 'disconnected'}`}>
-            Backend: {backendStatus}
-          </div>
           <small className="last-updated">
-            {lastUpdated ? `Actualisé à ${lastUpdated.toLocaleTimeString()} · auto 15 s` : 'Chargement…'}
+            {lastUpdated ? `Actualisé ${lastUpdated.toLocaleTimeString()} · auto 15 s` : 'Chargement…'}
           </small>
+          <div className={`status ${backendStatus.includes('✓') ? 'connected' : 'disconnected'}`}>
+            {backendStatus.includes('✓') ? 'Opérationnel' : 'Hors ligne'}
+          </div>
         </div>
       </header>
 
@@ -279,9 +282,9 @@ function App() {
             <small>{dashboard ? `${dashboard.alertStatus?.new || 0} nouvelles` : ''}</small>
           </div>
           <div className="card summary-card">
-            <span className="card-title">Temps de service</span>
-            <strong>{loading ? '...' : 'OK'}</strong>
-            <small>Backend actif</small>
+            <span className="card-title">Disponibilité</span>
+            <strong>{loading ? '…' : 'OK'}</strong>
+            <small>Backend & base de données actifs</small>
           </div>
         </section>
 
@@ -289,7 +292,7 @@ function App() {
 
         <section className="panel panel-list">
           <div className="panel-header">
-            <h2>🔧 Serveurs & Nœuds ({servers.length})</h2>
+            <h2>Serveurs & nœuds<span className="count">{servers.length}</span></h2>
             <button className="btn-small" onClick={refreshData}>Rafraîchir</button>
           </div>
           {loading ? (
@@ -320,7 +323,7 @@ function App() {
                         <UsageBar label="RAM" value={server.memory} />
                         <UsageBar label="DSK" value={server.disk} />
                         <span className={`metrics-source ${server.metricsSource === 'prometheus' ? 'real' : 'sim'}`}>
-                          {server.metricsSource === 'prometheus' ? '⚡ métriques réelles' : '⋯ simulé'}
+                          {server.metricsSource === 'prometheus' ? 'métriques réelles' : 'données simulées'}
                         </span>
                       </td>
                       <td>{server.location}</td>
@@ -348,7 +351,7 @@ function App() {
         <section className="grid-two">
           <div className="panel panel-list">
             <div className="panel-header">
-              <h2>🧩 Services déployés ({services.length})</h2>
+              <h2>Services déployés<span className="count">{services.length}</span></h2>
             </div>
             {loading ? (
               <p>⏳ Chargement des services...</p>
@@ -384,7 +387,7 @@ function App() {
 
           <div className="panel panel-list">
             <div className="panel-header">
-              <h2>🚨 Alertes ({alerts.length})</h2>
+              <h2>Alertes<span className="count">{alerts.length}</span></h2>
             </div>
             {loading ? (
               <p>⏳ Chargement des alertes...</p>
@@ -426,7 +429,8 @@ function App() {
           <DeployServer />
 
           <div className="panel panel-form">
-            <h2>➕ Ajouter un serveur (Manuel)</h2>
+            <h2>Ajouter un serveur (manuel)</h2>
+            <p className="form-hint">Enregistrement déclaratif d'un serveur existant.</p>
             <form className="management-form" onSubmit={handleCreateServer}>
               <input
                 type="text"
@@ -460,7 +464,8 @@ function App() {
           </div>
 
           <div className="panel panel-form">
-            <h2>➕ Déployer un service</h2>
+            <h2>Déployer un service</h2>
+            <p className="form-hint">Association d'un service applicatif à un serveur supervisé.</p>
             <form className="management-form" onSubmit={handleCreateService}>
               <input
                 type="text"
