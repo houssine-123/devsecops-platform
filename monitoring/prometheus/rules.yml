@@ -16,83 +16,75 @@ groups:
           summary: "DevSecOps alert pipeline is alive"
           description: "This heartbeat alert confirms that Prometheus can send notifications to Alertmanager."
 
-  - name: infrastructure
+  # ==========================================================================
+  # MACHINE HÔTE (le PC qui héberge la plateforme — job "node-exporter")
+  # Seuils élevés : la machine porte Docker + K8s + 17 conteneurs,
+  # sa base normale est ~80 % de RAM. On n'alerte que sur un vrai danger.
+  # ==========================================================================
+  - name: host-machine
     interval: 15s
     rules:
-      # ====================================================================
-      # CPU Alerts
-      # ====================================================================
-      - alert: HighCPUUsage
+      - alert: HostHighCPU
         expr: |
-          (100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance) * 100)) > 80
+          (100 - (avg(rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m])) by (instance) * 100)) > 90
+        for: 10m
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: "CPU élevé sur la MACHINE HÔTE"
+          description: "La machine hôte (PC de la plateforme) est à {{ $value | printf \"%.1f\" }}% de CPU depuis 10 minutes."
+
+      - alert: HostCriticalMemory
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"})) * 100 > 92
+        for: 10m
+        labels:
+          severity: critical
+          component: host
+        annotations:
+          summary: "Mémoire critique sur la MACHINE HÔTE"
+          description: "La machine hôte est à {{ $value | printf \"%.1f\" }}% de mémoire — risque d'instabilité de la plateforme."
+
+  # ==========================================================================
+  # SERVEURS SUPERVISÉS (serveurs déployés via l'app + serveur Ubuntu réel)
+  # Ce sont les alertes "métier" : elles parlent des serveurs des clients,
+  # identifiés par leur nom, pas de la machine qui fait tourner la plateforme.
+  # ==========================================================================
+  - name: monitored-servers
+    interval: 15s
+    rules:
+      - alert: ServerHighCPU
+        expr: |
+          (100 - (avg(rate(node_cpu_seconds_total{job=~"dynamic-servers|ubuntu-server-real",mode="idle"}[5m])) by (instance, server_name) * 100)) > 80
         for: 5m
         labels:
           severity: warning
-          component: infrastructure
+          component: monitored-server
         annotations:
-          summary: "High CPU Usage on {{ $labels.instance }}"
-          description: "CPU usage is {{ $value }}% on server {{ $labels.instance }}. This may indicate performance issues."
+          summary: "CPU élevé sur le serveur {{ $labels.server_name }}{{ $labels.instance }}"
+          description: "Le serveur supervisé {{ $labels.server_name }} ({{ $labels.instance }}) est à {{ $value | printf \"%.1f\" }}% de CPU."
 
-      - alert: CriticalCPUUsage
+      - alert: ServerHighMemory
         expr: |
-          (100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance) * 100)) > 95
-        for: 2m
-        labels:
-          severity: critical
-          component: infrastructure
-        annotations:
-          summary: "Critical CPU Usage on {{ $labels.instance }}"
-          description: "CPU usage is {{ $value }}% on server {{ $labels.instance }}. Immediate action required!"
-
-      # ====================================================================
-      # Memory Alerts
-      # ====================================================================
-      - alert: HighMemoryUsage
-        expr: |
-          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+          (1 - (node_memory_MemAvailable_bytes{job=~"dynamic-servers|ubuntu-server-real"} / node_memory_MemTotal_bytes{job=~"dynamic-servers|ubuntu-server-real"})) * 100 > 85
         for: 5m
         labels:
           severity: warning
-          component: infrastructure
+          component: monitored-server
         annotations:
-          summary: "High Memory Usage on {{ $labels.instance }}"
-          description: "Memory usage is {{ $value }}% on server {{ $labels.instance }}."
+          summary: "Mémoire élevée sur le serveur {{ $labels.server_name }}{{ $labels.instance }}"
+          description: "Le serveur supervisé {{ $labels.server_name }} ({{ $labels.instance }}) est à {{ $value | printf \"%.1f\" }}% de mémoire."
 
-      - alert: CriticalMemoryUsage
-        expr: |
-          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+      - alert: ServerDown
+        expr: up{job=~"dynamic-servers|ubuntu-server-real"} == 0
         for: 2m
         labels:
           severity: critical
-          component: infrastructure
+          component: monitored-server
         annotations:
-          summary: "Critical Memory Usage on {{ $labels.instance }}"
-          description: "Memory usage is {{ $value }}% on server {{ $labels.instance }}. Immediate action required!"
-
-      # ====================================================================
-      # Disk Space Alerts
-      # ====================================================================
-      - alert: HighDiskUsage
-        expr: |
-          (1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})) * 100 > 75
-        for: 5m
-        labels:
-          severity: warning
-          component: infrastructure
-        annotations:
-          summary: "High Disk Usage on {{ $labels.instance }}"
-          description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }} on server {{ $labels.instance }}."
-
-      - alert: CriticalDiskUsage
-        expr: |
-          (1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})) * 100 > 90
-        for: 2m
-        labels:
-          severity: critical
-          component: infrastructure
-        annotations:
-          summary: "Critical Disk Usage on {{ $labels.instance }}"
-          description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }} on server {{ $labels.instance }}. Immediate action required!"
+          summary: "Serveur {{ $labels.server_name }}{{ $labels.instance }} injoignable"
+          description: "Le serveur supervisé {{ $labels.server_name }} ({{ $labels.instance }}) ne répond plus au scrape Prometheus depuis 2 minutes."
 
   # ========================================================================
   # Application Metrics
@@ -149,11 +141,13 @@ groups:
           summary: "Backend database is not ready"
           description: "The backend is running but cannot confirm database readiness."
 
+      # severity info : basé sur les health checks simulés de la démo →
+      # visible dans l'app (webhook) mais n'envoie pas d'email
       - alert: DegradedServerDetected
         expr: app_servers_degraded_total{job="backend"} > 0
         for: 1m
         labels:
-          severity: warning
+          severity: info
           component: application
         annotations:
           summary: "Degraded server detected"
