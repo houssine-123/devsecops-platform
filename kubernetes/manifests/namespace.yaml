@@ -1,3 +1,7 @@
+# Pod Security Standards (PSS) en mode audit + warn, niveau baseline.
+# L'enforcement est volontairement exclu : node-exporter requiert des volumes
+# hostPath (interdits par baseline) pour lire les métriques du nœud.
+# Les violations sont journalisées et signalées sans casser le monitoring.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -5,3 +9,5 @@ metadata:
   labels:
     name: devsecops-platform
     app: monitoring-platform
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline

@@ -28,11 +28,14 @@ pipeline {
       }
     }
 
-    // ── STEP 2: Build ───────────────────────────────────────────────────────
+    // ── STEP 2: Build + Tests unitaires ─────────────────────────────────────
     stage('Build Backend') {
       steps {
         dir('app/backend') {
           sh 'npm ci --prefer-offline'
+          // Tests unitaires (jest + supertest, BDD mockée) ; la couverture
+          // lcov générée ici est ensuite importée par SonarQube
+          sh 'npm test'
         }
       }
     }
@@ -92,6 +95,43 @@ pipeline {
       }
     }
 
+    // ── STEP 4bis: Secret Scanning (Gitleaks) — BLOQUANT ────────────────────
+    // Scanne l'arbre de travail (--no-git) : aucun secret ne doit partir en image.
+    // Le workspace vit dans le volume pfe_jenkins_home (partagé via le socket Docker).
+    stage('Secret Scan (Gitleaks)') {
+      steps {
+        sh '''
+          docker run --rm -v pfe_jenkins_home:/scan ghcr.io/gitleaks/gitleaks:latest \
+            detect --no-git --source /scan/workspace/devsecops-pipeline \
+            --config /scan/workspace/devsecops-pipeline/.gitleaks.toml \
+            --report-format json --report-path /scan/workspace/devsecops-pipeline/gitleaks-report.json \
+            --exit-code 1 --no-banner
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
+        }
+      }
+    }
+
+    // ── STEP 4ter: IaC Scan (Checkov) — rapport (non bloquant) ──────────────
+    stage('IaC Scan (Checkov)') {
+      steps {
+        sh '''
+          docker run --rm -v pfe_jenkins_home:/scan bridgecrew/checkov:latest \
+            -d /scan/workspace/devsecops-pipeline/kubernetes \
+            --quiet --compact --soft-fail \
+            -o cli -o json --output-file-path console,/scan/workspace/devsecops-pipeline
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'results_json.json', allowEmptyArchive: true
+        }
+      }
+    }
+
     // ── STEP 5: Docker Build ────────────────────────────────────────────────
     stage('Docker Build') {
       steps {
@@ -100,8 +140,11 @@ pipeline {
       }
     }
 
+    // Politique de rejet : CRITICAL = build bloqué ; HIGH = rapporté
     stage('Trivy - Image Scan') {
       steps {
+        sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --timeout 20m --severity CRITICAL --exit-code 1 --no-progress ${BACKEND_IMAGE}"
+        sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --timeout 20m --severity CRITICAL --exit-code 1 --no-progress ${FRONTEND_IMAGE}"
         sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --timeout 20m --severity HIGH,CRITICAL --no-progress --format table ${BACKEND_IMAGE}  || true"
         sh "trivy image --cache-dir \$TRIVY_CACHE_DIR --timeout 20m --severity HIGH,CRITICAL --no-progress --format table ${FRONTEND_IMAGE} || true"
       }
@@ -188,6 +231,28 @@ pipeline {
               """
             }
           }
+        }
+      }
+    }
+
+    // ── STEP 8: DAST — OWASP ZAP baseline sur le staging ────────────────────
+    // Scan dynamique de l'application qui vient d'être construite, via le
+    // frontend du staging Compose (proxy /api inclus). -I : les alertes
+    // de niveau warning n'échouent pas le build ; le rapport est archivé.
+    stage('DAST (OWASP ZAP)') {
+      steps {
+        sh '''
+          docker run --rm --network pfe_devsecops-network \
+            -v pfe_jenkins_home:/zap/wrk \
+            -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://frontend:3000 \
+            -r workspace/devsecops-pipeline/zap-report.html \
+            -I
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'zap-report.html', allowEmptyArchive: true
         }
       }
     }

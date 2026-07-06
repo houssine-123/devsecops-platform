@@ -1,0 +1,23 @@
+# ============================================================================
+# Configuration Gitleaks — Secret Scanning du pipeline CI
+# ============================================================================
+# Les manifests Secret Kubernetes versionnés contiennent des valeurs de
+# DÉMONSTRATION assumées (changeme / jwt de dev). En production réelle, ces
+# valeurs viendraient de Vault ou d'un SealedSecret et ces exclusions
+# seraient retirées. Tout AUTRE secret détecté bloque le build.
+# ============================================================================
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Artefacts de build + secrets de démonstration versionnés volontairement"
+paths = [
+  '''node_modules''',
+  '''coverage''',
+  '''dist''',
+  '''package-lock\.json''',
+  '''kubernetes/manifests/secret\.yaml''',
+  '''kubernetes/manifests/monitoring/grafana-secret\.yaml''',
+  '''kubernetes/manifests/monitoring/alertmanager-secret\.yaml''',
+]
