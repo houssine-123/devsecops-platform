@@ -330,7 +330,7 @@ function App() {
           ) : servers.length === 0 ? (
             <p className="empty-hint">Aucun serveur enregistré — déployez-en un ci-dessous.</p>
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap scrollable">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -390,7 +390,7 @@ function App() {
             ) : services.length === 0 ? (
               <p className="empty-hint">Aucun service — utilisez le formulaire ci-dessous.</p>
             ) : (
-              <div className="table-wrap">
+              <div className="table-wrap scrollable">
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -430,7 +430,7 @@ function App() {
             ) : alerts.length === 0 ? (
               <p className="empty-hint">Aucune alerte active.</p>
             ) : (
-              <div className="table-wrap">
+              <div className="table-wrap scrollable">
                 <table className="data-table">
                   <thead>
                     <tr>

@@ -347,6 +347,13 @@ body {
 /* ── Tables ────────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; }
 
+/* Tables longues : hauteur max + défilement interne (en-tête figé).
+   Empêche une liste d'alertes/serveurs de repousser le reste de la page. */
+.table-wrap.scrollable {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -369,6 +376,23 @@ body {
   letter-spacing: 0.07em;
   white-space: nowrap;
 }
+
+/* En-tête collant lors du défilement interne */
+.table-wrap.scrollable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+/* Barre de défilement discrète */
+.table-wrap.scrollable::-webkit-scrollbar { width: 8px; }
+.table-wrap.scrollable::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+.table-wrap.scrollable::-webkit-scrollbar-track { background: transparent; }
 
 .data-table tbody tr { transition: background 0.12s ease; }
 .data-table tbody tr:hover { background: var(--surface-2); }
