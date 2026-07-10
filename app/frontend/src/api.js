@@ -107,36 +107,6 @@ export const simulateServerFailure = async (serverId) => {
   }
 };
 
-export const getServices = async () => {
-  try {
-    const response = await api.get('/api/services');
-    return response.data.services;
-  } catch (error) {
-    console.error('❌ Failed to fetch services:', error.message);
-    throw error;
-  }
-};
-
-export const createService = async (serviceData) => {
-  try {
-    const response = await api.post('/api/services', serviceData);
-    return response.data.service;
-  } catch (error) {
-    console.error('❌ Failed to create service:', error.message);
-    throw error;
-  }
-};
-
-export const deleteService = async (serviceId) => {
-  try {
-    const response = await api.delete(`/api/services/${serviceId}`);
-    return response.data;
-  } catch (error) {
-    console.error(`❌ Failed to delete service ${serviceId}:`, error.message);
-    throw error;
-  }
-};
-
 export const getAlerts = async () => {
   try {
     const response = await api.get('/api/alerts');
@@ -167,9 +137,6 @@ export default {
   deleteServer,
   runServerHealthCheck,
   simulateServerFailure,
-  getServices,
-  createService,
-  deleteService,
   getAlerts,
   updateAlert,
 };

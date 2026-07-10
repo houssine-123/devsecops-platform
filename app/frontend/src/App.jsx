@@ -44,15 +44,12 @@ function App() {
   const [backendStatus, setBackendStatus] = useState('checking...');
   const [dashboard, setDashboard] = useState(null);
   const [servers, setServers] = useState([]);
-  const [services, setServices] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [toasts, setToasts] = useState([]);
   const toastId = useRef(0);
-
-  const [newService, setNewService] = useState({ name: '', type: 'web application', runningOn: '', owner: '' });
 
   // ── Toasts (non bloquants, remplacent alert()) ────────────────────────────
   const notify = useCallback((message, type = 'success') => {
@@ -85,15 +82,13 @@ function App() {
   };
 
   const fetchAll = useCallback(async () => {
-    const [dashboardData, serversData, servicesData, alertsData] = await Promise.all([
+    const [dashboardData, serversData, alertsData] = await Promise.all([
       api.getDashboard(),
       api.getServers(),
-      api.getServices(),
       api.getAlerts(),
     ]);
     setDashboard(dashboardData);
     setServers(serversData);
-    setServices(servicesData);
     setAlerts(alertsData);
     setLastUpdated(new Date());
   }, []);
@@ -151,41 +146,6 @@ function App() {
       setServers((prev) => prev.filter((item) => item.id !== server.id));
       setDashboard((prev) => prev && { ...prev, servers: Math.max(0, prev.servers - 1) });
       notify(`Serveur « ${server.name} » supprimé (monitoring nettoyé).`);
-    } catch (err) {
-      notify('Erreur: ' + err.message, 'error');
-    }
-  };
-
-  const handleDeleteService = async (service) => {
-    if (!window.confirm(`Retirer le service « ${service.name} » ?`)) return;
-    try {
-      await api.deleteService(service.id);
-      setServices((prev) => prev.filter((item) => item.id !== service.id));
-      setDashboard((prev) => prev && { ...prev, services: Math.max(0, prev.services - 1) });
-      notify(`Service « ${service.name} » retiré.`);
-    } catch (err) {
-      notify('Erreur : ' + err.message, 'error');
-    }
-  };
-
-  const handleCreateService = async (event) => {
-    event.preventDefault();
-    if (!newService.name || !newService.runningOn) {
-      notify('Veuillez choisir un service et un serveur de destination.', 'error');
-      return;
-    }
-    try {
-      const serviceData = {
-        name: newService.name,
-        type: newService.type,
-        runningOn: newService.runningOn,
-        owner: newService.owner || 'Ops Team',
-      };
-      const createdService = await api.createService(serviceData);
-      setServices((prev) => [createdService, ...prev]);
-      setNewService({ name: '', type: 'web application', runningOn: '', owner: '' });
-      setDashboard((prev) => prev && { ...prev, services: prev.services + 1 });
-      notify(`Service « ${createdService.name} » déployé.`);
     } catch (err) {
       notify('Erreur: ' + err.message, 'error');
     }
@@ -250,7 +210,7 @@ function App() {
           <div className="brand-mark">DS</div>
           <div>
             <h1>DevSecOps Platform</h1>
-            <p className="subtitle">Supervision d'infrastructure · nœuds, services & alertes</p>
+            <p className="subtitle">Supervision d'infrastructure · nœuds & alertes</p>
           </div>
         </div>
         <div className="header-side">
@@ -276,11 +236,6 @@ function App() {
             <span className="card-title">Serveurs</span>
             <strong>{dashboard?.servers ?? '-'}</strong>
             <small>{dashboard ? `${dashboard.serverStatus?.online || 0} en ligne` : ''}</small>
-          </div>
-          <div className="card summary-card">
-            <span className="card-title">Services</span>
-            <strong>{dashboard?.services ?? '-'}</strong>
-            <small>{dashboard ? `${dashboard.services} applications surveillées` : ''}</small>
           </div>
           <div className="card summary-card">
             <span className="card-title">Alertes</span>
@@ -356,48 +311,7 @@ function App() {
           )}
         </section>
 
-        <section className="grid-two">
-          <div className="panel panel-list">
-            <div className="panel-header">
-              <h2>Services déployés<span className="count">{services.length}</span></h2>
-            </div>
-            {loading ? (
-              <TableSkeleton rows={2} cols={5} />
-            ) : services.length === 0 ? (
-              <p className="empty-hint">Aucun service — utilisez le formulaire ci-dessous.</p>
-            ) : (
-              <div className="table-wrap scrollable">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Nom</th>
-                      <th>Type</th>
-                      <th>Serveur</th>
-                      <th>État</th>
-                      <th>Équipe</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {services.map((service) => (
-                      <tr key={service.id}>
-                        <td className="cell-name">{service.name}</td>
-                        <td>{service.type}</td>
-                        <td>{service.serverName || '-'}</td>
-                        <td>{renderStatusBadge(service.status)}</td>
-                        <td>{service.owner}</td>
-                        <td className="cell-actions">
-                          <button className="btn-small danger" title="Retirer le service" onClick={() => handleDeleteService(service)}>Retirer</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="panel panel-list">
+        <section className="panel panel-list">
             <div className="panel-header">
               <h2>Alertes<span className="count">{alerts.length}</span></h2>
             </div>
@@ -437,53 +351,10 @@ function App() {
                 </table>
               </div>
             )}
-          </div>
         </section>
 
-        <section className="form-section">
+        <section className="form-section single">
           <DeployServer />
-
-          <div className="panel panel-form">
-            <h2>Déployer un service</h2>
-            <p className="form-hint">Association d'un service applicatif à un serveur supervisé.</p>
-            <form className="management-form" onSubmit={handleCreateService}>
-              <input
-                type="text"
-                placeholder="Nom du service"
-                value={newService.name}
-                onChange={(e) => setNewService({ ...newService, name: e.target.value })}
-                required
-              />
-              <select
-                value={newService.type}
-                onChange={(e) => setNewService({ ...newService, type: e.target.value })}
-              >
-                <option value="web application">Web application</option>
-                <option value="database">Database</option>
-                <option value="monitoring">Monitoring</option>
-                <option value="microservice">Microservice</option>
-              </select>
-              <select
-                value={newService.runningOn}
-                onChange={(e) => setNewService({ ...newService, runningOn: e.target.value })}
-                required
-              >
-                <option value="">Sélectionner un serveur</option>
-                {servers.map((server) => (
-                  <option key={server.id} value={server.id}>
-                    {server.name} ({server.ip})
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                placeholder="Équipe propriétaire"
-                value={newService.owner}
-                onChange={(e) => setNewService({ ...newService, owner: e.target.value })}
-              />
-              <button type="submit" className="btn-submit">Déployer le service</button>
-            </form>
-          </div>
         </section>
       </main>
 
