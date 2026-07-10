@@ -127,6 +127,16 @@ export const createService = async (serviceData) => {
   }
 };
 
+export const deleteService = async (serviceId) => {
+  try {
+    const response = await api.delete(`/api/services/${serviceId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`❌ Failed to delete service ${serviceId}:`, error.message);
+    throw error;
+  }
+};
+
 export const getAlerts = async () => {
   try {
     const response = await api.get('/api/alerts');
@@ -159,6 +169,7 @@ export default {
   simulateServerFailure,
   getServices,
   createService,
+  deleteService,
   getAlerts,
   updateAlert,
 };

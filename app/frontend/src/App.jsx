@@ -21,6 +21,25 @@ function UsageBar({ label, value }) {
   );
 }
 
+// Skeleton de chargement (lignes grisées animées) pour un rendu élégant
+function TableSkeleton({ rows = 3, cols = 5 }) {
+  return (
+    <div className="table-wrap">
+      <table className="data-table skeleton-table">
+        <tbody>
+          {Array.from({ length: rows }).map((_, r) => (
+            <tr key={r}>
+              {Array.from({ length: cols }).map((__, c) => (
+                <td key={c}><span className="skeleton-bar" /></td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function App() {
   const [backendStatus, setBackendStatus] = useState('checking...');
   const [dashboard, setDashboard] = useState(null);
@@ -161,6 +180,18 @@ function App() {
     }
   };
 
+  const handleDeleteService = async (service) => {
+    if (!window.confirm(`Retirer le service « ${service.name} » ?`)) return;
+    try {
+      await api.deleteService(service.id);
+      setServices((prev) => prev.filter((item) => item.id !== service.id));
+      setDashboard((prev) => prev && { ...prev, services: Math.max(0, prev.services - 1) });
+      notify(`Service « ${service.name} » retiré.`);
+    } catch (err) {
+      notify('Erreur : ' + err.message, 'error');
+    }
+  };
+
   const handleCreateService = async (event) => {
     event.preventDefault();
     if (!newService.name || !newService.runningOn) {
@@ -259,8 +290,7 @@ function App() {
       <main className="container">
         {error && (
           <div className="error-box">
-            ❌ {error}
-            <br />
+            {error}
             <small>Vérifiez que le backend est lancé sur http://localhost:5000</small>
           </div>
         )}
@@ -296,7 +326,9 @@ function App() {
             <button className="btn-small" onClick={refreshData}>Rafraîchir</button>
           </div>
           {loading ? (
-            <p>⏳ Chargement des serveurs...</p>
+            <TableSkeleton rows={3} cols={8} />
+          ) : servers.length === 0 ? (
+            <p className="empty-hint">Aucun serveur enregistré — déployez-en un ci-dessous.</p>
           ) : (
             <div className="table-wrap">
               <table className="data-table">
@@ -336,9 +368,9 @@ function App() {
                       </td>
                       <td>{formatTime(server.lastHealthCheck)}</td>
                       <td className="cell-actions">
-                        <button className="btn-small" onClick={() => handleHealthCheck(server)}>Check</button>
-                        <button className="btn-small warning" onClick={() => handleSimulateFailure(server)}>Simuler</button>
-                        <button className="btn-small danger" onClick={() => handleDeleteServer(server)}>✕</button>
+                        <button className="btn-small" title="Relancer un health check" onClick={() => handleHealthCheck(server)}>Vérifier</button>
+                        <button className="btn-small warning" title="Simuler une panne (démo) pour déclencher une alerte" onClick={() => handleSimulateFailure(server)}>Simuler panne</button>
+                        <button className="btn-small danger" title="Supprimer le serveur et nettoyer le monitoring" onClick={() => handleDeleteServer(server)}>Supprimer</button>
                       </td>
                     </tr>
                   ))}
@@ -354,7 +386,7 @@ function App() {
               <h2>Services déployés<span className="count">{services.length}</span></h2>
             </div>
             {loading ? (
-              <p>⏳ Chargement des services...</p>
+              <TableSkeleton rows={2} cols={5} />
             ) : services.length === 0 ? (
               <p className="empty-hint">Aucun service — utilisez le formulaire ci-dessous.</p>
             ) : (
@@ -367,6 +399,7 @@ function App() {
                       <th>Serveur</th>
                       <th>État</th>
                       <th>Équipe</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -377,6 +410,9 @@ function App() {
                         <td>{service.serverName || '-'}</td>
                         <td>{renderStatusBadge(service.status)}</td>
                         <td>{service.owner}</td>
+                        <td className="cell-actions">
+                          <button className="btn-small danger" title="Retirer le service" onClick={() => handleDeleteService(service)}>Retirer</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -390,7 +426,9 @@ function App() {
               <h2>Alertes<span className="count">{alerts.length}</span></h2>
             </div>
             {loading ? (
-              <p>⏳ Chargement des alertes...</p>
+              <TableSkeleton rows={3} cols={4} />
+            ) : alerts.length === 0 ? (
+              <p className="empty-hint">Aucune alerte active.</p>
             ) : (
               <div className="table-wrap">
                 <table className="data-table">
@@ -410,11 +448,12 @@ function App() {
                         <td>{renderStatusBadge(alert.status)}</td>
                         <td className="cell-actions">
                           {alert.status === 'new' && (
-                            <button className="btn-small" onClick={() => handleAckAlert(alert.id)}>Ack</button>
+                            <button className="btn-small" title="Prendre en compte" onClick={() => handleAckAlert(alert.id)}>Prendre en compte</button>
                           )}
                           {alert.status !== 'resolved' && (
-                            <button className="btn-small success" onClick={() => handleResolveAlert(alert.id)}>Resolve</button>
+                            <button className="btn-small success" title="Marquer comme résolue" onClick={() => handleResolveAlert(alert.id)}>Résoudre</button>
                           )}
+                          {alert.status === 'resolved' && <span className="muted-dash">—</span>}
                         </td>
                       </tr>
                     ))}

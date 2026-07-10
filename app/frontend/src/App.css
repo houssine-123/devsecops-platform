@@ -648,15 +648,41 @@ body {
 .error-box {
   background: var(--danger-bg);
   border: 1px solid rgba(248, 113, 113, 0.35);
+  border-left: 3px solid var(--danger);
   color: var(--danger);
   padding: 14px 18px;
   border-radius: var(--radius);
   font-size: 13px;
+  font-weight: 600;
 }
 
-.error-box small { display: block; margin-top: 5px; color: var(--text-2); }
+.error-box small { display: block; margin-top: 5px; color: var(--text-2); font-weight: 400; }
 
-.empty-hint { color: var(--text-3); font-style: italic; font-size: 13px; }
+/* ── Skeleton de chargement ────────────────────────────────── */
+.skeleton-table td { border-bottom: 1px solid var(--border); }
+
+.skeleton-bar {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-hover) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.empty-hint { color: var(--text-3); font-style: italic; font-size: 13px; padding: 8px 0; }
+
+.muted-dash { color: var(--text-3); }
 
 .deploy-result {
   margin-top: 14px;
