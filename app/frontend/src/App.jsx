@@ -52,7 +52,6 @@ function App() {
   const [toasts, setToasts] = useState([]);
   const toastId = useRef(0);
 
-  const [newServer, setNewServer] = useState({ name: '', ip: '', location: '', tags: '' });
   const [newService, setNewService] = useState({ name: '', type: 'web application', runningOn: '', owner: '' });
 
   // ── Toasts (non bloquants, remplacent alert()) ────────────────────────────
@@ -140,29 +139,6 @@ function App() {
       setError(err.message || 'Erreur lors du rafraîchissement des données.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleCreateServer = async (event) => {
-    event.preventDefault();
-    if (!newServer.name || !newServer.ip || !newServer.location) {
-      notify('Veuillez remplir tous les champs du serveur.', 'error');
-      return;
-    }
-    try {
-      const serverData = {
-        name: newServer.name,
-        ip: newServer.ip,
-        location: newServer.location,
-        tags: newServer.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
-      };
-      const createdServer = await api.createServer(serverData);
-      setServers((prev) => [createdServer, ...prev]);
-      setNewServer({ name: '', ip: '', location: '', tags: '' });
-      setDashboard((prev) => prev && { ...prev, servers: prev.servers + 1 });
-      notify(`Serveur « ${createdServer.name} » ajouté.`);
-    } catch (err) {
-      notify('Erreur: ' + err.message, 'error');
     }
   };
 
@@ -466,41 +442,6 @@ function App() {
 
         <section className="form-section">
           <DeployServer />
-
-          <div className="panel panel-form">
-            <h2>Ajouter un serveur (manuel)</h2>
-            <p className="form-hint">Enregistrement déclaratif d'un serveur existant.</p>
-            <form className="management-form" onSubmit={handleCreateServer}>
-              <input
-                type="text"
-                placeholder="Nom du serveur"
-                value={newServer.name}
-                onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Adresse IP"
-                value={newServer.ip}
-                onChange={(e) => setNewServer({ ...newServer, ip: e.target.value })}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Localisation"
-                value={newServer.location}
-                onChange={(e) => setNewServer({ ...newServer, location: e.target.value })}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Tags (comma separated)"
-                value={newServer.tags}
-                onChange={(e) => setNewServer({ ...newServer, tags: e.target.value })}
-              />
-              <button type="submit" className="btn-submit">Créer le serveur</button>
-            </form>
-          </div>
 
           <div className="panel panel-form">
             <h2>Déployer un service</h2>
