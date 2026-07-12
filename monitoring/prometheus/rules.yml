@@ -34,6 +34,7 @@ groups:
         annotations:
           summary: "CPU élevé sur la MACHINE HÔTE"
           description: "La machine hôte (PC de la plateforme) est à {{ $value | printf \"%.1f\" }}% de CPU depuis 10 minutes."
+          runbook_url: "https://github.com/houssine-123/devsecops-platform/blob/master/docs/RUNBOOKS.md#hosthighcpu"
 
       - alert: HostCriticalMemory
         expr: |
@@ -45,6 +46,7 @@ groups:
         annotations:
           summary: "Mémoire critique sur la MACHINE HÔTE"
           description: "La machine hôte est à {{ $value | printf \"%.1f\" }}% de mémoire — risque d'instabilité de la plateforme."
+          runbook_url: "https://github.com/houssine-123/devsecops-platform/blob/master/docs/RUNBOOKS.md#hostcriticalmemory"
 
   # ==========================================================================
   # SERVEURS SUPERVISÉS (serveurs déployés via l'app + serveur Ubuntu réel)
@@ -85,6 +87,7 @@ groups:
         annotations:
           summary: "Serveur {{ $labels.server_name }}{{ $labels.instance }} injoignable"
           description: "Le serveur supervisé {{ $labels.server_name }} ({{ $labels.instance }}) ne répond plus au scrape Prometheus depuis 2 minutes."
+          runbook_url: "https://github.com/houssine-123/devsecops-platform/blob/master/docs/RUNBOOKS.md#serverdown"
 
   # ========================================================================
   # Application Metrics
@@ -168,6 +171,7 @@ groups:
         annotations:
           summary: "Database Connection Failed"
           description: "Unable to connect to PostgreSQL database."
+          runbook_url: "https://github.com/houssine-123/devsecops-platform/blob/master/docs/RUNBOOKS.md#databasedown"
 
   # ========================================================================
   # Container & Pod Alerts (For K8s)

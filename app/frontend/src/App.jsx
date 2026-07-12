@@ -64,6 +64,18 @@ function App() {
     return Number.isNaN(date.getTime()) ? '-' : date.toLocaleTimeString();
   };
 
+  // Temps relatif : "à l'instant", "il y a 5 min", "il y a 2 h", "il y a 3 j"
+  const formatRelative = (value) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    const s = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (s < 60) return "à l'instant";
+    if (s < 3600) return `il y a ${Math.floor(s / 60)} min`;
+    if (s < 86400) return `il y a ${Math.floor(s / 3600)} h`;
+    return `il y a ${Math.floor(s / 86400)} j`;
+  };
+
   const updateAlertCounters = (previousDashboard, previousStatus, nextStatus) => {
     if (!previousDashboard || !previousStatus || !nextStatus || previousStatus === nextStatus) {
       return previousDashboard;
@@ -316,7 +328,7 @@ function App() {
               <h2>Alertes<span className="count">{alerts.length}</span></h2>
             </div>
             {loading ? (
-              <TableSkeleton rows={3} cols={4} />
+              <TableSkeleton rows={3} cols={5} />
             ) : alerts.length === 0 ? (
               <p className="empty-hint">Aucune alerte active.</p>
             ) : (
@@ -327,6 +339,7 @@ function App() {
                       <th>Titre</th>
                       <th>Gravité</th>
                       <th>État</th>
+                      <th>Déclenchée</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -336,6 +349,9 @@ function App() {
                         <td>{alert.title}</td>
                         <td>{renderSeverityBadge(alert.severity)}</td>
                         <td>{renderStatusBadge(alert.status)}</td>
+                        <td title={alert.createdAt ? new Date(alert.createdAt).toLocaleString() : ''}>
+                          <span className="muted-dash">{formatRelative(alert.createdAt)}</span>
+                        </td>
                         <td className="cell-actions">
                           {alert.status === 'new' && (
                             <button className="btn-small" title="Prendre en compte" onClick={() => handleAckAlert(alert.id)}>Prendre en compte</button>
