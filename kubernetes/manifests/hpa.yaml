@@ -1,0 +1,54 @@
+# ============================================================================
+# HorizontalPodAutoscaler — Auto-scaling (mise à l'échelle automatique)
+# ============================================================================
+# Répond à l'exigence : "quand j'ai besoin d'un serveur, en créer un
+# automatiquement à partir du modèle existant".
+#
+# Kubernetes surveille le CPU réel des pods (via metrics-server) et crée/supprime
+# automatiquement des instances IDENTIQUES (clonées depuis le template du
+# Deployment) pour maintenir la charge cible.
+# ============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: devsecops-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend-deployment
+  minReplicas: 2          # toujours au moins 2 instances (haute disponibilité)
+  maxReplicas: 10         # jusqu'à 10 instances en cas de forte charge
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50   # si CPU moyen > 50% → créer de nouvelles instances
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 15   # réagit vite à la montée de charge
+    scaleDown:
+      stabilizationWindowSeconds: 60   # redescend prudemment (évite le yo-yo)
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-hpa
+  namespace: devsecops-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend-deployment
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60

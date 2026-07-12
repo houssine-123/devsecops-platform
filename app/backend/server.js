@@ -574,8 +574,12 @@ app.post('/api/servers/auto-deploy', async (req, res) => {
     } catch (_) { /* keep default */ }
 
     // 1. Create & start a node-exporter container as the simulated server
+    // --restart=unless-stopped : SELF-HEALING — si le conteneur crash, Docker
+    //   le redémarre automatiquement (équivalent du self-healing Kubernetes au
+    //   niveau du démon Docker). Répond à l'exigence "quand un serveur crash,
+    //   il redémarre automatiquement".
     console.log(`Creating Docker container: ${containerName} on network ${dockerNetwork}...`);
-    const createCmd = `docker run -d --name ${containerName} --network ${dockerNetwork} prom/node-exporter:latest`;
+    const createCmd = `docker run -d --restart=unless-stopped --name ${containerName} --network ${dockerNetwork} prom/node-exporter:latest`;
     const { stdout: containerId } = await execAsync(createCmd);
     const cId = containerId.trim();
     console.log(`Container created: ${cId}`);
