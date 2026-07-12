@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: houssineguidara12/devsecops-frontend:27
+        image: houssineguidara12/devsecops-frontend:29
         ports:
         - containerPort: 3000
         env:
