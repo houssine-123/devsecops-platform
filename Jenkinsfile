@@ -62,7 +62,7 @@ pipeline {
                   -Dsonar.projectKey=${SONAR_PROJECT} \
                   -Dsonar.projectName='DevSecOps PFE Platform' \
                   -Dsonar.sources=app/backend,app/frontend/src \
-                  -Dsonar.exclusions='**/node_modules/**,**/dist/**,**/coverage/**,**/build/**' \
+                  -Dsonar.exclusions='**/node_modules/**,**/dist/**,**/coverage/**,**/build/**,**/tests/**,**/*.test.js,**/*.spec.js' \
                   -Dsonar.host.url=${SONAR_HOST_URL} \
                   -Dsonar.login=\${SONAR_TOKEN}
               """
