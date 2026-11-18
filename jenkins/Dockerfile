@@ -12,6 +12,10 @@ RUN apt-get update -qq && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
         https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
         > /etc/apt/sources.list.d/docker.list && \
+    # Node.js 20 (npm builds in the pipeline)
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+        > /etc/apt/sources.list.d/nodesource.list && \
     # Trivy
     wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
@@ -20,7 +24,7 @@ RUN apt-get update -qq && \
     wget -qO /opt/sonar-scanner.zip \
         https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.2.1.4610-linux-x64.zip && \
     apt-get update -qq && \
-    apt-get install -y -qq docker-ce-cli trivy unzip && \
+    apt-get install -y -qq docker-ce-cli trivy unzip nodejs && \
     # Install sonar-scanner
     unzip -q /opt/sonar-scanner.zip -d /opt/ && \
     mv /opt/sonar-scanner-6.2.1.4610-linux-x64 /opt/sonar-scanner && \
@@ -35,6 +39,10 @@ RUN apt-get update -qq && \
 
 # Add jenkins user to docker group (so it can run docker commands)
 RUN groupadd -f docker && usermod -aG docker jenkins
+
+# Le conteneur tourne en root (docker.sock) mais jenkins_home appartient à uid 1000 :
+# autoriser git à opérer sur ces répertoires
+RUN git config --global --add safe.directory "*"
 
 USER jenkins
 

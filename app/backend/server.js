@@ -16,9 +16,13 @@
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const auth = require('./auth');
 const db = require('./db');
 const vault = require('./vault');
 const prometheus = require('./prometheus');
+const jenkins = require('./jenkins');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
@@ -38,8 +42,22 @@ const PORT = process.env.APP_PORT || 5000;
 // Ne pas divulguer la technologie du serveur (hotspot SonarQube)
 app.disable('x-powered-by');
 
-app.use(cors());
-app.use(express.json());
+// Un seul proxy devant le backend (nginx du frontend ou ingress-nginx) :
+// nécessaire pour que le limiteur de débit voie la vraie IP du client
+app.set('trust proxy', 1);
+
+// En-têtes de sécurité HTTP (X-Content-Type-Options, HSTS, CSP...)
+app.use(helmet());
+
+// CORS fermé par défaut : le frontend passe par le même origine (proxy /api).
+// CORS_ORIGINS="https://a,https://b" ouvre explicitement des origines tierces.
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use(cors({ origin: corsOrigins.length > 0 ? corsOrigins : false }));
+
+app.use(express.json({ limit: '100kb' }));
 
 let appStartTime = Date.now();
 let totalRequests = 0;
@@ -113,6 +131,63 @@ const requestInstrumentation = (req, res, next) => {
 };
 
 app.use(requestInstrumentation);
+
+// ============================================================
+// AUTHENTIFICATION
+// ============================================================
+
+// Anti force brute : 10 tentatives de connexion par IP et par quart d'heure
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, retry later' },
+});
+
+app.post('/api/auth/login', loginLimiter, (req, res) => {
+  const { username, password } = req.body || {};
+
+  if (!auth.isLoginEnabled()) {
+    return res.status(503).json({ error: 'Authentication not configured' });
+  }
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
+  if (!auth.verifyCredentials(username, password)) {
+    totalErrors++;
+    console.warn(`🔒 Échec de connexion pour "${username.slice(0, 64)}" depuis ${req.ip}`);
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  console.log(`🔓 Connexion réussie : ${username} depuis ${req.ip}`);
+  return res.status(200).json({
+    token: auth.issueToken(username),
+    tokenType: 'Bearer',
+    expiresIn: auth.TOKEN_TTL,
+    user: { username, role: 'admin' },
+  });
+});
+
+// Routes publiques : sondes Kubernetes, collecte Prometheus, webhook
+// Alertmanager (appelé depuis le réseau interne) et connexion.
+// Tout le reste de /api exige un jeton valide.
+const PUBLIC_ROUTES = new Set([
+  'GET /api/health',
+  'GET /api/ready',
+  'GET /api/metrics',
+  'POST /api/alertmanager/webhook',
+  'POST /api/auth/login',
+]);
+
+app.use('/api', (req, res, next) => {
+  if (PUBLIC_ROUTES.has(`${req.method} ${req.baseUrl}${req.path}`)) return next();
+  return auth.requireAuth(req, res, next);
+});
+
+app.get('/api/auth/me', (req, res) => {
+  res.status(200).json({ user: { username: req.user.sub, role: req.user.role } });
+});
 
 // ============================================================
 // ENDPOINTS GLOBAUX
@@ -300,6 +375,23 @@ app.get('/api/monitoring/history', async (req, res) => {
   } catch (err) {
     totalErrors++;
     res.status(503).json({ error: 'Prometheus unreachable', message: err.message });
+  }
+});
+
+// ============================================================
+// PIPELINE CI/CD (état réel lu dans Jenkins)
+// ============================================================
+
+app.get('/api/cicd/pipeline', async (req, res) => {
+  try {
+    const status = await jenkins.getPipelineStatus();
+    res.status(200).json(status);
+  } catch (err) {
+    console.warn('Jenkins injoignable :', err.message);
+    res.status(503).json({
+      error: 'Jenkins unreachable',
+      jenkinsUrl: `${jenkins.JENKINS_PUBLIC_URL}/job/${jenkins.JENKINS_JOB}/`,
+    });
   }
 });
 
@@ -891,10 +983,12 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   totalErrors += 1;
   console.error('Error:', err);
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: err.message,
-  });
+  // Erreurs de parsing JSON : réponse 400 explicite, sans détail interne
+  if (err.type === 'entity.parse.failed' || err.type === 'entity.too.large') {
+    return res.status(err.status || 400).json({ error: 'Invalid request body' });
+  }
+  // Ne jamais renvoyer le message d'erreur interne au client
+  return res.status(500).json({ error: 'Internal Server Error' });
 });
 
 // ============================================================
@@ -905,8 +999,9 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     console.log('🔐 Chargement des secrets depuis Vault...');
-    const dbConfig = await vault.loadDatabaseConfig();
-    db.configureDatabase(dbConfig);
+    const secrets = await vault.loadSecrets();
+    db.configureDatabase(secrets.db);
+    auth.configureAuth(secrets.auth);
 
     console.log('🔄 Initialisation de la base de données...');
     await db.initDatabase();

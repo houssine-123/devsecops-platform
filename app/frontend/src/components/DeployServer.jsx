@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { deployServer } from '../api';
 
 export default function DeployServer() {
   const [formData, setFormData] = useState({
@@ -16,8 +17,6 @@ export default function DeployServer() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
   const handleDeploy = async (e) => {
     e.preventDefault();
 
@@ -32,27 +31,15 @@ export default function DeployServer() {
     setResult(null);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/servers/auto-deploy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name,
-          location: formData.location
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors du déploiement');
-      }
+      const data = await deployServer(formData.name, formData.location);
 
       setStatus('');
       setResult(data);
       setFormData({ name: '', location: 'virtualbox' });
 
     } catch (err) {
-      setError(`Erreur : ${err.message}`);
+      const message = err.response?.data?.error || err.message || 'Erreur lors du déploiement';
+      setError(`Erreur : ${message}`);
       setStatus('');
     } finally {
       setLoading(false);

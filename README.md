@@ -117,7 +117,8 @@ flowchart LR
 
 | Service | URL | Identifiants |
 |---|---|---|
-| Application (HTTPS) | https://devsecops.local | — |
+| Application (HTTPS) | https://devsecops.local | admin / *(Vault : `ADMIN_PASSWORD`)* |
+| Application (compose) | http://localhost:3000 | admin / *(Vault : `ADMIN_PASSWORD`)* |
 | Jenkins | http://localhost:8090 | admin / *(local)* |
 | ArgoCD | http://localhost:30088 | admin / *(voir gestionnaire de secrets)* |
 | SonarQube | http://localhost:9000 | admin / *(modifié)* |
@@ -133,14 +134,20 @@ flowchart LR
 # 1. Stack Docker Compose (app + monitoring + CI)
 docker compose up -d --build
 
-# 2. Kubernetes : ArgoCD déploie automatiquement depuis ce dépôt
+# 2. Amorcer Vault (mode dev, en mémoire : à refaire après chaque redémarrage)
+.\scripts\seed-vault.ps1 -AdminPassword "<mot de passe de l'application>"
+docker compose restart backend
+
+# 3. Kubernetes : créer les Secrets depuis Vault (aucun secret dans Git),
+#    puis ArgoCD déploie automatiquement depuis ce dépôt
+.\scripts\sync-k8s-secrets.ps1
 kubectl apply -n argocd -f kubernetes/argocd/project.yaml
 kubectl apply -n argocd -f kubernetes/argocd/application.yaml
 
-# 3. Résolution du domaine local (PowerShell admin)
+# 4. Résolution du domaine local (PowerShell admin)
 Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 devsecops.local"
 
-# 4. Lancer le pipeline : Jenkins → devsecops-pipeline → Build Now
+# 5. Lancer le pipeline : Jenkins → devsecops-pipeline → Build Now
 #    (ou simplement pousser un commit)
 ```
 
@@ -168,10 +175,14 @@ Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 devsecops.local"
 
 ## 🔐 Sécurité — mesures notables
 
+- **Authentification de l'API** : jeton JWT (HS256, 8 h) obtenu par `POST /api/auth/login` ; toutes les routes exigent le jeton sauf `/api/health`, `/api/ready`, `/api/metrics` et le webhook Alertmanager. Limitation à 10 tentatives de connexion par quart d'heure et par IP.
+- **Durcissement HTTP** : en-têtes Helmet côté backend, CSP + `X-Frame-Options` côté nginx, CORS fermé (le frontend passe par le même origine), erreurs internes jamais renvoyées au client
 - **Quality Gate bloquant** : un code de mauvaise qualité ne peut pas être déployé
-- **Double scan Trivy** (source puis images) avec base de vulnérabilités mise en cache
-- **Secrets hors git** : `alertmanager.yml` gitignoré (template `.example` fourni), credentials dans le store Jenkins, blocage vérifié par GitHub push protection
-- **Conteneurs non-root** (frontend nginx, backend node), **NetworkPolicies**, **RBAC** Kubernetes
+- **Double scan Trivy** (source puis images) : CRITICAL bloquant dans les deux cas, HIGH rapporté
+- **Secrets hors git** : Vault est la source de vérité (identifiants BDD, compte admin, secret JWT) ; `scripts/sync-k8s-secrets.ps1` crée les Secrets Kubernetes ; `alertmanager.yml` gitignoré ; credentials CI dans le store Jenkins
+- **Conteneurs non-root** à UID numérique (backend 1000, frontend 10001), racine en lecture seule, capacités Linux supprimées, `seccomp` RuntimeDefault ; images sans dépendances de développement ni npm
+- **NetworkPolicies** *zero-trust* par composant, **RBAC** Kubernetes. Limite : le CNI de Docker Desktop ne fait pas respecter les NetworkPolicies ; elles nécessitent Calico ou Cilium pour être effectives.
+- **Mise à l'échelle** : le nombre de répliques est piloté uniquement par le HPA (pas de champ `replicas` qu'Argo CD rétablirait)
 - **HTTPS obligatoire** : redirection 308 HTTP→HTTPS via l'ingress
 - **Tags d'images immuables** : chaque déploiement est traçable jusqu'au commit git qui l'a produit
 

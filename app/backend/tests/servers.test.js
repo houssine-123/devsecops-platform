@@ -13,26 +13,44 @@ jest.mock('../db', () => {
   };
 });
 
+process.env.ADMIN_USERNAME = 'admin';
+process.env.ADMIN_PASSWORD = 'test-password';
+process.env.JWT_SECRET = 'test-jwt-secret';
+
 const request = require('supertest');
 const app = require('../server');
 
 describe('Servers API', () => {
-  test('GET /api/servers returns list', async () => {
+  let authHeader;
+
+  beforeAll(async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'test-password' });
+    authHeader = `Bearer ${res.body.token}`;
+  });
+
+  test('GET /api/servers rejects anonymous requests', async () => {
     const res = await request(app).get('/api/servers');
+    expect(res.statusCode).toBe(401);
+  });
+
+  test('GET /api/servers returns list', async () => {
+    const res = await request(app).get('/api/servers').set('Authorization', authHeader);
     expect(res.statusCode).toBe(200);
     expect(res.body).toHaveProperty('servers');
     expect(Array.isArray(res.body.servers)).toBe(true);
   });
 
   test('POST /api/servers validates input', async () => {
-    const res = await request(app).post('/api/servers').send({ name: 'a' });
+    const res = await request(app).post('/api/servers').set('Authorization', authHeader).send({ name: 'a' });
     expect(res.statusCode).toBe(400);
     expect(res.body).toHaveProperty('error');
   });
 
   test('POST /api/servers creates server with valid data', async () => {
     const payload = { name: 'srv1', ip: '10.0.0.1', location: 'datacenter-1' };
-    const res = await request(app).post('/api/servers').send(payload);
+    const res = await request(app).post('/api/servers').set('Authorization', authHeader).send(payload);
     expect(res.statusCode).toBe(201);
     expect(res.body).toHaveProperty('server');
     expect(res.body.server).toMatchObject(payload);

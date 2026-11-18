@@ -55,9 +55,7 @@ async function readVaultSecrets() {
  * Construit la configuration base de données :
  * secrets Vault en priorité, variables d'environnement en secours.
  */
-async function loadDatabaseConfig() {
-  const secrets = (await readVaultSecrets()) || {};
-
+function buildDatabaseConfig(secrets = {}) {
   const config = {
     host: secrets.DB_HOST || process.env.DB_HOST || 'localhost',
     port: parseInt(secrets.DB_PORT || process.env.DB_PORT || '5432', 10),
@@ -70,7 +68,34 @@ async function loadDatabaseConfig() {
   return config;
 }
 
+/**
+ * Construit la configuration d'authentification (compte admin + secret JWT).
+ */
+function buildAuthConfig(secrets = {}) {
+  return {
+    username: secrets.ADMIN_USERNAME || process.env.ADMIN_USERNAME || 'admin',
+    password: secrets.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '',
+    jwtSecret: secrets.JWT_SECRET || process.env.JWT_SECRET || '',
+  };
+}
+
+async function loadDatabaseConfig() {
+  return buildDatabaseConfig((await readVaultSecrets()) || {});
+}
+
+/**
+ * Lit Vault une seule fois et renvoie toutes les configurations sensibles.
+ */
+async function loadSecrets() {
+  const secrets = (await readVaultSecrets()) || {};
+  return {
+    db: buildDatabaseConfig(secrets),
+    auth: buildAuthConfig(secrets),
+  };
+}
+
 module.exports = {
   readVaultSecrets,
   loadDatabaseConfig,
+  loadSecrets,
 };

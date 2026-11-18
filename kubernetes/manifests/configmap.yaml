@@ -14,9 +14,6 @@ data:
   DB_PORT: "5432"
   DB_NAME: "appdb"
 
-  # Frontend configuration
-  VITE_API_URL: "http://backend-service:5000"
-
   # PostgreSQL configuration
   POSTGRES_DB: "appdb"
   POSTGRES_USER: "postgres"

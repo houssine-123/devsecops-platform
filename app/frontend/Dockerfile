@@ -7,8 +7,9 @@ ENV VITE_BUILD_NUMBER=$VITE_BUILD_NUMBER
 
 WORKDIR /build
 
-COPY package.json ./
-RUN npm install
+# Versions figées par le lockfile (constructions reproductibles)
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 RUN npm run build
@@ -16,24 +17,24 @@ RUN npm run build
 # Stage 2: Runtime with nginx (non-root)
 FROM nginx:alpine
 
-# Create non-root user for nginx
-RUN addgroup -S nginxgroup && adduser -S nginxuser -G nginxgroup
+# Utilisateur non-root avec UID numérique fixe (vérifiable par runAsNonRoot)
+RUN addgroup -S -g 10001 nginxgroup && adduser -S -u 10001 -G nginxgroup nginxuser
 
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY security-headers.conf /etc/nginx/security-headers.conf
 COPY --from=builder /build/dist /usr/share/nginx/html
 
 RUN rm -f /etc/nginx/conf.d/default.conf && \
     chown -R nginxuser:nginxgroup /usr/share/nginx/html && \
     chown -R nginxuser:nginxgroup /var/cache/nginx && \
-    chown -R nginxuser:nginxgroup /var/log/nginx && \
-    touch /var/run/nginx.pid && \
-    chown nginxuser:nginxgroup /var/run/nginx.pid
+    chown -R nginxuser:nginxgroup /var/log/nginx
 
-USER nginxuser
+# PID et fichiers temporaires dans /tmp : compatible readOnlyRootFilesystem
+USER 10001
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
+    CMD wget --quiet --tries=1 --spider http://127.0.0.1:3000/health || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

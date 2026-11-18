@@ -27,7 +27,8 @@ target/
 *.zip
 
 # Docker
-.dockerignore
+# (.dockerignore DOIT être versionné : sans lui, la CI copie tests et
+#  rapports de couverture dans les images)
 docker-compose.override.yml
 
 # Kubernetes
@@ -47,7 +48,9 @@ monitoring/alertmanager/alertmanager.yml
 # Cibles Prometheus ecrites par le backend a l'execution (etat runtime)
 monitoring/prometheus/dynamic/*.json
 
-# Secrets
+# Secrets — gérés dans Vault, synchronisés par scripts/sync-k8s-secrets.ps1
+kubernetes/manifests/secret.yaml
+kubernetes/manifests/monitoring/grafana-secret.yaml
 *.key
 *.crt
 *.p12

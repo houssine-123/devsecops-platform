@@ -6,7 +6,9 @@ metadata:
   labels:
     app: backend
 spec:
-  replicas: 2
+  # Pas de champ "replicas" : le nombre d'instances est piloté par le HPA
+  # (hpa.yaml, 2 à 10). Le fixer ici ferait revenir Argo CD (selfHeal) à 2
+  # répliques à chaque mise à l'échelle.
   selector:
     matchLabels:
       app: backend
@@ -15,11 +17,24 @@ spec:
       labels:
         app: backend
     spec:
+      # Le backend n'appelle pas l'API Kubernetes : aucun jeton monté
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: backend
         image: houssineguidara12/devsecops-backend:29
         ports:
         - containerPort: 5000
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
         env:
         - name: APP_ENV
           valueFrom:
@@ -51,6 +66,8 @@ spec:
             configMapKeyRef:
               name: app-config
               key: POSTGRES_USER
+        # Secrets : Secret "app-secrets" synchronisé depuis Vault par
+        # scripts/sync-k8s-secrets.ps1 (plus aucun secret versionné dans Git)
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -61,6 +78,17 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: JWT_SECRET
+        - name: ADMIN_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: ADMIN_USERNAME
+              optional: true
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: ADMIN_PASSWORD
         # Supervision temps réel : l'app interroge Prometheus directement
         - name: PROMETHEUS_URL
           value: "http://prometheus-service:9090"
@@ -71,6 +99,9 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /api/health
@@ -83,3 +114,7 @@ spec:
             port: 5000
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi

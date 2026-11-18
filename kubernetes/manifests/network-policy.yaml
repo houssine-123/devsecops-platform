@@ -1,8 +1,18 @@
 # ============================================================================
 # Kubernetes Network Policies - Zero-trust networking
 # ============================================================================
+# Principe : tout est refusé par défaut, puis chaque flux légitime est ouvert
+# explicitement (source, destination, port).
+#
+# Toute la plateforme (application + supervision) vit dans le namespace
+# devsecops-platform : les flux internes sont donc décrits par podSelector.
+#
+# ATTENTION : ces règles ne sont appliquées que si le plugin réseau (CNI) du
+# cluster les prend en charge (Calico, Cilium...). Le CNI par défaut de
+# Docker Desktop les accepte sans les faire respecter.
+# ============================================================================
 
-# Default deny all ingress and egress in the namespace
+# Refus par défaut de tout trafic entrant et sortant dans le namespace
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -15,7 +25,7 @@ spec:
     - Egress
 
 ---
-# Allow DNS resolution for all pods (required for service discovery)
+# Résolution DNS autorisée pour tous les pods (découverte des services)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -33,7 +43,7 @@ spec:
           protocol: TCP
 
 ---
-# Frontend: accept traffic from ingress-nginx, send to backend only
+# Frontend : reçoit le trafic de l'ingress, ne parle qu'au backend
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -52,7 +62,7 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: ingress-nginx
       ports:
-        - port: 80
+        - port: 3000
   egress:
     - to:
         - podSelector:
@@ -62,7 +72,8 @@ spec:
         - port: 5000
 
 ---
-# Backend: accept from frontend + ingress + prometheus scraping, send to postgres + alertmanager
+# Backend : appelé par le frontend, l'ingress, Prometheus (collecte) et
+# Alertmanager (webhook) ; appelle PostgreSQL et Prometheus (supervision temps réel)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -80,18 +91,15 @@ spec:
         - podSelector:
             matchLabels:
               app: frontend
-      ports:
-        - port: 5000
-    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+        - podSelector:
+            matchLabels:
+              app: alertmanager
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: ingress-nginx
-      ports:
-        - port: 5000
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: monitoring
       ports:
         - port: 5000
   egress:
@@ -102,14 +110,14 @@ spec:
       ports:
         - port: 5432
     - to:
-        - namespaceSelector:
+        - podSelector:
             matchLabels:
-              kubernetes.io/metadata.name: monitoring
+              app: prometheus
       ports:
-        - port: 9093
+        - port: 9090
 
 ---
-# PostgreSQL: only backend and backup jobs can connect
+# PostgreSQL : accessible uniquement par le backend et le job de sauvegarde
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -127,12 +135,179 @@ spec:
         - podSelector:
             matchLabels:
               app: backend
-      ports:
-        - port: 5432
-    - from:
         - podSelector:
             matchLabels:
               app: postgres-backup
       ports:
         - port: 5432
   egress: []
+
+---
+# Job de sauvegarde : se connecte uniquement à PostgreSQL
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-backup-network-policy
+  namespace: devsecops-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-backup
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+
+---
+# Prometheus : interface exposée (LoadBalancer) ; collecte les exporteurs,
+# le backend et notifie Alertmanager
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-network-policy
+  namespace: devsecops-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: 9090
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - port: 5000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: node-exporter
+      ports:
+        - port: 9100
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kube-state-metrics
+      ports:
+        - port: 8080
+    - to:
+        - podSelector:
+            matchLabels:
+              app: alertmanager
+      ports:
+        - port: 9093
+
+---
+# Alertmanager : reçoit Prometheus (et l'interface exposée) ; envoie vers le
+# webhook du backend, le serveur SMTP (587) et Slack (443)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-network-policy
+  namespace: devsecops-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: alertmanager
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: 9093
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - port: 5000
+    - ports:
+        - port: 587
+        - port: 443
+
+---
+# Grafana : interface exposée ; interroge uniquement Prometheus
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-network-policy
+  namespace: devsecops-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: grafana
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 9090
+
+---
+# Exporteurs : collectés uniquement par Prometheus
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: node-exporter-network-policy
+  namespace: devsecops-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: node-exporter
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 9100
+  egress: []
+
+---
+# kube-state-metrics : collecté par Prometheus ; interroge l'API Kubernetes
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kube-state-metrics-network-policy
+  namespace: devsecops-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: kube-state-metrics
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 8080
+  egress:
+    - ports:
+        - port: 443
+        - port: 6443

@@ -43,8 +43,20 @@ services:
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: ${VAULT_TOKEN:-devsecops-root-token}
       VAULT_SECRET_PATH: secret/data/devsecops
+      # Compte admin et secret JWT : lus dans Vault (scripts/seed-vault.ps1).
+      # Ces variables ne servent que de secours si Vault est indisponible.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+    # L'image tourne en uid 1000 (non-root). Le socket Docker de l'hôte
+    # appartient à root:root (0660) : l'appartenance au groupe 0 suffit pour
+    # la fonction "auto-deploy", sans exécuter le processus en root.
+    group_add:
+      - "0"
+    # Exposé sur la boucle locale uniquement : les navigateurs passent par
+    # le proxy /api du frontend (même origine), pas par ce port.
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,14 +82,12 @@ services:
       context: ./app/frontend
       dockerfile: Dockerfile
     container_name: devsecops-frontend
-    environment:
-      VITE_API_URL: http://backend:5000
     ports:
       - "3000:3000"
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
       interval: 15s
       timeout: 10s
       retries: 3

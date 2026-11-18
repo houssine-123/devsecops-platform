@@ -6,7 +6,7 @@ metadata:
   labels:
     app: frontend
 spec:
-  replicas: 2
+  # Pas de champ "replicas" : piloté par le HPA (hpa.yaml, 2 à 6)
   selector:
     matchLabels:
       app: frontend
@@ -15,17 +15,23 @@ spec:
       labels:
         app: frontend
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: frontend
         image: houssineguidara12/devsecops-frontend:29
         ports:
         - containerPort: 3000
-        env:
-        - name: VITE_API_URL
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: VITE_API_URL
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
         resources:
           requests:
             memory: "64Mi"
@@ -33,6 +39,10 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "100m"
+        # nginx écrit son PID et ses fichiers temporaires dans /tmp
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /health
@@ -45,3 +55,7 @@ spec:
             port: 3000
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi

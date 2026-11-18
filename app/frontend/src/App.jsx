@@ -2,10 +2,22 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from './api';
 import DeployServer from './components/DeployServer';
 import LiveMonitoring from './components/LiveMonitoring';
+import PipelineView from './components/PipelineView';
 import './App.css';
 
 const REFRESH_INTERVAL_MS = 15000;
 const BUILD_NUMBER = import.meta.env.VITE_BUILD_NUMBER || 'dev';
+
+const NAV_ITEMS = [
+  { id: 'overview', label: 'Vue d’ensemble', icon: '⌁' },
+  { id: 'monitoring', label: 'Monitoring', icon: '▥' },
+  { id: 'servers', label: 'Serveurs', icon: '▦' },
+  { id: 'alerts', label: 'Alertes', icon: '!' },
+  { id: 'services', label: 'Services', icon: '◫' },
+  { id: 'deploy', label: 'Déploiement', icon: '↥' },
+  { id: 'security', label: 'Sécurité', icon: '◇' },
+  { id: 'cicd', label: 'CI/CD', icon: '↻' },
+];
 
 function UsageBar({ label, value }) {
   const pct = Math.max(0, Math.min(100, Math.round(value)));
@@ -40,11 +52,15 @@ function TableSkeleton({ rows = 3, cols = 5 }) {
   );
 }
 
-function App() {
+function App({ user, onLogout }) {
   const [backendStatus, setBackendStatus] = useState('checking...');
   const [dashboard, setDashboard] = useState(null);
   const [servers, setServers] = useState([]);
+  const [services, setServices] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [activeView, setActiveView] = useState('overview');
+  const [alertStatusFilter, setAlertStatusFilter] = useState('all');
+  const [alertSeverityFilter, setAlertSeverityFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -94,13 +110,15 @@ function App() {
   };
 
   const fetchAll = useCallback(async () => {
-    const [dashboardData, serversData, alertsData] = await Promise.all([
+    const [dashboardData, serversData, servicesData, alertsData] = await Promise.all([
       api.getDashboard(),
       api.getServers(),
+      api.getServices(),
       api.getAlerts(),
     ]);
     setDashboard(dashboardData);
     setServers(serversData);
+    setServices(servicesData);
     setAlerts(alertsData);
     setLastUpdated(new Date());
   }, []);
@@ -208,6 +226,21 @@ function App() {
   const renderStatusBadge = (status) => <span className={`badge ${status}`}>{status}</span>;
   const renderSeverityBadge = (severity) => <span className={`badge severity-${severity}`}>{severity}</span>;
 
+  const newAlerts = dashboard?.alertStatus?.new || 0;
+  const degradedServers = dashboard?.serverStatus?.degraded || 0;
+  const onlineServers = dashboard?.serverStatus?.online || 0;
+  const platformState = backendStatus.includes('✓') && newAlerts === 0 && degradedServers === 0
+    ? 'healthy'
+    : backendStatus.includes('✓')
+      ? 'warning'
+      : 'critical';
+  const platformLabel = platformState === 'healthy' ? 'Healthy' : platformState === 'warning' ? 'Warning' : 'Critical';
+  const filteredAlerts = alerts.filter((alert) => {
+    const matchesStatus = alertStatusFilter === 'all' || alert.status === alertStatusFilter;
+    const matchesSeverity = alertSeverityFilter === 'all' || alert.severity === alertSeverityFilter;
+    return matchesStatus && matchesSeverity;
+  });
+
   return (
     <div className="app">
       {/* Toasts */}
@@ -232,8 +265,27 @@ function App() {
           <div className={`status ${backendStatus.includes('✓') ? 'connected' : 'disconnected'}`}>
             {backendStatus.includes('✓') ? 'Opérationnel' : 'Hors ligne'}
           </div>
+          {onLogout && (
+            <button type="button" className="btn-logout" onClick={onLogout} title={user ? `Connecté : ${user.username}` : undefined}>
+              Déconnexion
+            </button>
+          )}
         </div>
       </header>
+
+      <div className="view-tabs" aria-label="Navigation principale">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`view-tab ${activeView === item.id ? 'active' : ''}`}
+            onClick={() => setActiveView(item.id)}
+          >
+            <span>{item.icon}</span>
+            {item.label}
+          </button>
+        ))}
+      </div>
 
       <main className="container">
         {error && (
@@ -243,16 +295,35 @@ function App() {
           </div>
         )}
 
+        {activeView === 'overview' && (
+          <>
+        <section className="platform-hero">
+          <div>
+            <span className="eyebrow">Centre de contrôle</span>
+            <h2>Supervision DevSecOps unifiée</h2>
+            <p>État applicatif, infrastructure, alertes et pipeline dans une même console opérationnelle.</p>
+          </div>
+          <div className={`platform-state ${platformState}`}>
+            <span>{platformLabel}</span>
+            <strong>{backendStatus.includes('✓') ? 'Système joignable' : 'Incident backend'}</strong>
+          </div>
+        </section>
+
         <section className="dashboard-grid">
           <div className="card summary-card">
             <span className="card-title">Serveurs</span>
             <strong>{dashboard?.servers ?? '-'}</strong>
-            <small>{dashboard ? `${dashboard.serverStatus?.online || 0} en ligne` : ''}</small>
+            <small>{dashboard ? `${onlineServers} en ligne · ${degradedServers} dégradé(s)` : ''}</small>
+          </div>
+          <div className="card summary-card">
+            <span className="card-title">Services</span>
+            <strong>{dashboard?.services ?? services.length ?? '-'}</strong>
+            <small>Applications et composants supervisés</small>
           </div>
           <div className="card summary-card">
             <span className="card-title">Alertes</span>
             <strong>{dashboard?.alerts ?? '-'}</strong>
-            <small>{dashboard ? `${dashboard.alertStatus?.new || 0} nouvelles` : ''}</small>
+            <small>{dashboard ? `${newAlerts} nouvelles · ${dashboard.alertStatus?.resolved || 0} résolues` : ''}</small>
           </div>
           <div className="card summary-card">
             <span className="card-title">Disponibilité</span>
@@ -262,7 +333,10 @@ function App() {
         </section>
 
         <LiveMonitoring />
+          </>
+        )}
 
+        {(activeView === 'servers' || activeView === 'overview') && (
         <section className="panel panel-list">
           <div className="panel-header">
             <h2>Serveurs & nœuds<span className="count">{servers.length}</span></h2>
@@ -322,15 +396,31 @@ function App() {
             </div>
           )}
         </section>
+        )}
 
+        {(activeView === 'alerts' || activeView === 'overview') && (
         <section className="panel panel-list">
             <div className="panel-header">
-              <h2>Alertes<span className="count">{alerts.length}</span></h2>
+              <h2>Alertes<span className="count">{filteredAlerts.length}/{alerts.length}</span></h2>
+              <div className="filter-row">
+                <select value={alertSeverityFilter} onChange={(e) => setAlertSeverityFilter(e.target.value)} aria-label="Filtrer par gravité">
+                  <option value="all">Toutes gravités</option>
+                  <option value="critical">Critical</option>
+                  <option value="warning">Warning</option>
+                  <option value="info">Info</option>
+                </select>
+                <select value={alertStatusFilter} onChange={(e) => setAlertStatusFilter(e.target.value)} aria-label="Filtrer par statut">
+                  <option value="all">Tous statuts</option>
+                  <option value="new">New</option>
+                  <option value="acknowledged">Acknowledged</option>
+                  <option value="resolved">Resolved</option>
+                </select>
+              </div>
             </div>
             {loading ? (
               <TableSkeleton rows={3} cols={5} />
-            ) : alerts.length === 0 ? (
-              <p className="empty-hint">Aucune alerte active.</p>
+            ) : filteredAlerts.length === 0 ? (
+              <p className="empty-hint">Aucune alerte ne correspond aux filtres sélectionnés.</p>
             ) : (
               <div className="table-wrap scrollable">
                 <table className="data-table">
@@ -344,7 +434,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {alerts.map((alert) => (
+                    {filteredAlerts.map((alert) => (
                       <tr key={alert.id}>
                         <td>{alert.title}</td>
                         <td>{renderSeverityBadge(alert.severity)}</td>
@@ -368,10 +458,85 @@ function App() {
               </div>
             )}
         </section>
+        )}
 
+        {activeView === 'monitoring' && <LiveMonitoring />}
+
+        {activeView === 'services' && (
+          <section className="panel panel-list">
+            <div className="panel-header">
+              <h2>Services applicatifs<span className="count">{services.length}</span></h2>
+              <button className="btn-small" onClick={refreshData}>Rafraîchir</button>
+            </div>
+            {loading ? (
+              <TableSkeleton rows={3} cols={6} />
+            ) : services.length === 0 ? (
+              <p className="empty-hint">Aucun service enregistré pour l’instant.</p>
+            ) : (
+              <div className="table-wrap scrollable">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nom</th>
+                      <th>Type</th>
+                      <th>État</th>
+                      <th>Serveur</th>
+                      <th>Owner</th>
+                      <th>Dernier déploiement</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {services.map((service) => (
+                      <tr key={service.id}>
+                        <td className="cell-name">{service.name}</td>
+                        <td>{service.type}</td>
+                        <td>{renderStatusBadge(service.status)}</td>
+                        <td>{service.serverName ? `${service.serverName} (${service.serverIp})` : service.runningOn}</td>
+                        <td>{service.owner}</td>
+                        <td>{formatRelative(service.lastDeployment)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeView === 'security' && (
+          <section className="insight-grid">
+            <div className="panel insight-panel">
+              <span className="eyebrow">Shift Left Security</span>
+              <h2>Contrôles sécurité</h2>
+              <div className="timeline-list">
+                <span><strong>SonarQube</strong><small>Quality Gate bloquant</small></span>
+                <span><strong>Trivy</strong><small>Scan filesystem et images Docker</small></span>
+                <span><strong>Gitleaks</strong><small>Détection de secrets avant déploiement</small></span>
+                <span><strong>Checkov</strong><small>Analyse IaC Kubernetes</small></span>
+                <span><strong>Vault</strong><small>Gestion centralisée des secrets</small></span>
+              </div>
+            </div>
+            <div className="panel insight-panel">
+              <span className="eyebrow">Runtime</span>
+              <h2>Durcissement Kubernetes</h2>
+              <div className="status-list">
+                <span>RBAC configuré</span>
+                <span>NetworkPolicy zero-trust</span>
+                <span>Secrets Kubernetes isolés</span>
+                <span>Ingress TLS via cert-manager</span>
+                <span>Probes liveness/readiness</span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {activeView === 'cicd' && <PipelineView />}
+
+        {activeView === 'deploy' && (
         <section className="form-section single">
           <DeployServer />
         </section>
+        )}
       </main>
 
       <footer className="footer">

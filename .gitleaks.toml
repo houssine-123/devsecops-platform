@@ -1,23 +1,21 @@
 # ============================================================================
 # Configuration Gitleaks — Secret Scanning du pipeline CI
 # ============================================================================
-# Les manifests Secret Kubernetes versionnés contiennent des valeurs de
-# DÉMONSTRATION assumées (changeme / jwt de dev). En production réelle, ces
-# valeurs viendraient de Vault ou d'un SealedSecret et ces exclusions
-# seraient retirées. Tout AUTRE secret détecté bloque le build.
+# Aucun secret applicatif n'est versionné : ils vivent dans Vault et sont
+# matérialisés dans Kubernetes par scripts/sync-k8s-secrets.ps1.
+# Seule exception : alertmanager-secret.yaml, qui ne contient que des valeurs
+# de remplacement (REPLACE_ME). Tout secret détecté bloque le build.
 # ============================================================================
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Artefacts de build + secrets de démonstration versionnés volontairement"
+description = "Artefacts de build + gabarit Alertmanager à valeurs de remplacement"
 paths = [
   '''node_modules''',
   '''coverage''',
   '''dist''',
   '''package-lock\.json''',
-  '''kubernetes/manifests/secret\.yaml''',
-  '''kubernetes/manifests/monitoring/grafana-secret\.yaml''',
   '''kubernetes/manifests/monitoring/alertmanager-secret\.yaml''',
 ]

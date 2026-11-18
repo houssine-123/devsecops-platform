@@ -80,12 +80,15 @@ pipeline {
       }
     }
 
-    // ── STEP 4: Trivy Security Scan ─────────────────────────────────────────
+    // ── STEP 4: Trivy Security Scan (SCA des dépendances) ───────────────────
     // --timeout 20m : le téléchargement de la DB dépasse les 5 min par défaut
     // --skip-dirs node_modules : déjà couvert par le scan des lockfiles
+    // Politique de rejet identique au scan d'images : CRITICAL = build bloqué ;
+    // HIGH = rapporté sans bloquer
     stage('Trivy - Source Scan') {
       steps {
-        sh 'trivy fs --cache-dir $TRIVY_CACHE_DIR --timeout 20m --skip-dirs node_modules --severity HIGH,CRITICAL --no-progress --format table .'
+        sh 'trivy fs --cache-dir $TRIVY_CACHE_DIR --timeout 20m --skip-dirs node_modules --severity CRITICAL --exit-code 1 --no-progress --format table .'
+        sh 'trivy fs --cache-dir $TRIVY_CACHE_DIR --timeout 20m --skip-dirs node_modules --severity HIGH --no-progress --format table . || true'
       }
       post {
         always {

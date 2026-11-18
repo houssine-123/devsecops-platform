@@ -6,16 +6,75 @@
 
 import axios from 'axios';
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-console.log('🔗 Backend URL:', BACKEND_URL);
+// Appels en même origine : nginx (Docker Compose) ou l'ingress (Kubernetes)
+// relaient /api vers le backend, et Vite fait de même en développement.
+// Aucune URL de backend n'est donc figée dans le bundle.
+const TOKEN_KEY = 'devsecops.token';
+const USER_KEY = 'devsecops.user';
 
 const api = axios.create({
-  baseURL: BACKEND_URL,
+  baseURL: '',
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// ── Session (jeton JWT conservé le temps de l'onglet) ───────────────────────
+export const getToken = () => {
+  try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+};
+
+export const getCurrentUser = () => {
+  try { return JSON.parse(sessionStorage.getItem(USER_KEY) || 'null'); } catch { return null; }
+};
+
+const saveSession = (token, user) => {
+  try {
+    sessionStorage.setItem(TOKEN_KEY, token);
+    sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch { /* stockage indisponible : session limitée à la page */ }
+};
+
+export const logout = () => {
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
+  } catch { /* rien à nettoyer */ }
+  window.dispatchEvent(new Event('auth:logout'));
+};
+
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// Jeton expiré ou révoqué : retour à l'écran de connexion
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const isLogin = error.config?.url === '/api/auth/login';
+    if (error.response?.status === 401 && !isLogin && getToken()) logout();
+    return Promise.reject(error);
+  },
+);
+
+export const login = async (username, password) => {
+  const response = await api.post('/api/auth/login', { username, password });
+  saveSession(response.data.token, response.data.user);
+  return response.data.user;
+};
+
+// État réel du pipeline, lu dans Jenkins par le backend
+export const getPipeline = async () => {
+  const response = await api.get('/api/cicd/pipeline');
+  return response.data;
+};
+
+export const deployServer = async (name, location) => {
+  const response = await api.post('/api/servers/auto-deploy', { name, location });
+  return response.data;
+};
 
 export const checkHealth = async () => {
   try {
@@ -117,6 +176,16 @@ export const getAlerts = async () => {
   }
 };
 
+export const getServices = async () => {
+  try {
+    const response = await api.get('/api/services');
+    return response.data.services;
+  } catch (error) {
+    console.error('❌ Failed to fetch services:', error.message);
+    throw error;
+  }
+};
+
 export const updateAlert = async (alertId, updateData) => {
   try {
     const response = await api.put(`/api/alerts/${alertId}`, updateData);
@@ -128,6 +197,10 @@ export const updateAlert = async (alertId, updateData) => {
 };
 
 export default {
+  login,
+  logout,
+  deployServer,
+  getPipeline,
   checkHealth,
   getMonitoringOverview,
   getMonitoringHistory,
@@ -137,6 +210,7 @@ export default {
   deleteServer,
   runServerHealthCheck,
   simulateServerFailure,
+  getServices,
   getAlerts,
   updateAlert,
 };
