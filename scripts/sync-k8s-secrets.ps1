@@ -17,7 +17,7 @@ $SecretName = "app-secrets"
 
 function Get-VaultField([string]$Field) {
     $value = docker exec -e VAULT_TOKEN=$VaultToken devsecops-vault `
-        vault kv get -field=$Field secret/devsecops
+        vault kv get "-field=$Field" secret/devsecops
     if ($LASTEXITCODE -ne 0 -or -not $value) {
         throw "Champ '$Field' introuvable dans Vault (lancer d'abord scripts/seed-vault.ps1)"
     }
@@ -42,12 +42,12 @@ if ($exists) {
 
 Write-Host "Création / mise à jour du Secret $Namespace/$SecretName..."
 kubectl -n $Namespace create secret generic $SecretName `
-    --from-literal=DB_USER=$DbUser `
-    --from-literal=DB_PASSWORD=$DbPassword `
-    --from-literal=POSTGRES_PASSWORD=$DbPassword `
-    --from-literal=ADMIN_USERNAME=$AdminUsername `
-    --from-literal=ADMIN_PASSWORD=$AdminPassword `
-    --from-literal=JWT_SECRET=$JwtSecret `
+    "--from-literal=DB_USER=$DbUser" `
+    "--from-literal=DB_PASSWORD=$DbPassword" `
+    "--from-literal=POSTGRES_PASSWORD=$DbPassword" `
+    "--from-literal=ADMIN_USERNAME=$AdminUsername" `
+    "--from-literal=ADMIN_PASSWORD=$AdminPassword" `
+    "--from-literal=JWT_SECRET=$JwtSecret" `
     --dry-run=client -o yaml | kubectl apply -f - | Out-Null
 
 kubectl -n $Namespace label secret $SecretName managed-by=vault-sync --overwrite | Out-Null
@@ -62,7 +62,7 @@ if ($grafana) {
 } else {
     $GrafanaPass = Get-VaultField "GRAFANA_ADMIN_PASSWORD"
     kubectl -n $Namespace create secret generic grafana-secret `
-        --from-literal=admin-password=$GrafanaPass | Out-Null
+        "--from-literal=admin-password=$GrafanaPass" | Out-Null
     Write-Host "Secret grafana-secret créé depuis Vault."
 }
 kubectl -n $Namespace label secret grafana-secret managed-by=vault-sync --overwrite | Out-Null
