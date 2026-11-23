@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: backend
-        image: houssineguidara12/devsecops-backend:37
+        image: houssineguidara12/devsecops-backend:41
         ports:
         - containerPort: 5000
         securityContext:
