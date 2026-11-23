@@ -255,7 +255,7 @@ function App({ user, onLogout }) {
           <div className="brand-mark">DS</div>
           <div>
             <h1>DevSecOps Platform</h1>
-            <p className="subtitle">Supervision d'infrastructure · nœuds & alertes</p>
+            <p className="subtitle">Supervision d'infrastructure · démonstration soutenance</p>
           </div>
         </div>
         <div className="header-side">
